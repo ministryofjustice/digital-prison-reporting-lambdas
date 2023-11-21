@@ -73,7 +73,7 @@ public class S3FileTransferLambda implements RequestHandler<Map<String, String>,
 
         final AmazonS3 s3 = s3ClientBuilder.buildClient(region);
 
-        logger.log(String.format("Moving S3 objects older than %d from %s to %s", retentionDays, sourceBucket, destinationBucket));
+        logger.log(String.format("Moving S3 objects older than %d days from %s to %s", retentionDays, sourceBucket, destinationBucket));
 
         logger.log("Listing files in S3 source location: " + sourceBucket);
         List<String> objectKeys = getObjectsList(s3, sourceBucket, sourceFolder, retentionDays);
