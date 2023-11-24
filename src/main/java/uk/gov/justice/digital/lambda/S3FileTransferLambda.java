@@ -18,16 +18,16 @@ import java.util.*;
 /**
  * This Lambda moves parquet files from a source bucket to a destination bucket
  * using the following JSON event structure
- * <p>
- *  {
- *     "sourceBucket": "dpr-landing-zone-development",
- *     "destinationBucket": "dpr-raw-zone-development",
- *     "retentionDays": 0,
- *     "sourceFolder": "OMS_OWNER/MOVEMENTS"
- *   }
- * </p>
+ * <pre>
+ * {
+ *    "sourceBucket": "some-source-bucket",
+ *    "destinationBucket": "some-destination-bucket",
+ *    "retentionDays": 0,
+ *    "sourceFolder": "some/folder"
+ * }
+ * </pre>
  * Only files with the lastModifiedDate older than the current date-time - retentionDays will be moved.
- * Files which failed to be copied will not be deleted
+ * Files which failed to be copied will not be deleted.
  */
 public class S3FileTransferLambda implements RequestHandler<Map<String, String>, Void> {
 
