@@ -19,6 +19,32 @@ import java.util.ArrayList;
 import java.util.Map;
 import java.util.Optional;
 
+/**
+ * Lambda function to send a callback to AWS step function notifying it that the DMS task triggered has stopped.
+ * The function runs in two modes depending on the input event received.
+ * After the AWS step function triggers a DMS task restart, the lambda is also invoked with a registerTaskToken event sample:
+ *
+ * <p>
+ *  {
+ *     "token": "some-step-function-task-token",
+ *     "replicationTaskArn": "DMS replication task ARN"
+ *   }
+ * </p>
+ *
+ * On receiving this event, the token is saved to dynamoDB using the replicationTaskArn value as key.
+ *
+ * When the DMS task is stopped, the resulting cloudwatch event triggers this lambda with a sample request of:
+ *
+ * <p>
+ *  {
+ *     "resources": [ "DMS replication task ARN" ]
+ *   }
+ * </p>
+ *
+ * On receiving the event, the Lambda retrieves the taskToken from dynamoDB,
+ * sends a success notification to AWS the step function informing it that the DMS task has stopped,
+ * and finally deletes the taskToken from dynamoDB.
+ */
 public class StepFunctionDMSNotificationLambda implements RequestHandler<Map<String, Object>, Void> {
 
     private final DynamoDbClientBuilder dynamoDbClient;
