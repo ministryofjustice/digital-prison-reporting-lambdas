@@ -17,6 +17,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import uk.gov.justice.digital.clients.s3.S3ClientBuilder;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -41,7 +42,7 @@ public class S3FileTransferLambdaTest {
     @Mock
     private LambdaLogger mockLogger;
     @Mock
-    private S3Client s3ClientBuilder;
+    private S3ClientBuilder mockS3ClientBuilder;
     @Mock
     private AmazonS3 mockS3;
     @Mock
@@ -55,8 +56,8 @@ public class S3FileTransferLambdaTest {
 
     ZoneId utcZoneId = ZoneId.of("UTC");
 
-    private final String SOURCE_BUCKET = "source-bucket";
-    private final String DESTINATION_BUCKET = "destination-bucket";
+    private final static String SOURCE_BUCKET = "source-bucket";
+    private final static String DESTINATION_BUCKET = "destination-bucket";
 
     private S3FileTransferLambda underTest;
 
@@ -64,8 +65,9 @@ public class S3FileTransferLambdaTest {
     public void setup() {
         when(contextMock.getLogger()).thenReturn(mockLogger);
         doNothing().when(mockLogger).log(anyString());
+        when(mockS3ClientBuilder.buildClient(eq(DEFAULT_REGION))).thenReturn(mockS3);
 
-        underTest = new S3FileTransferLambda(s3ClientBuilder);
+        underTest = new S3FileTransferLambda(mockS3ClientBuilder);
     }
 
     @Test
@@ -183,7 +185,6 @@ public class S3FileTransferLambdaTest {
     }
 
     private void mockS3ObjectListing(List<S3ObjectSummary> objectSummaries) {
-        when(s3ClientBuilder.buildClient(eq(DEFAULT_REGION))).thenReturn(mockS3);
         when(mockS3.listObjects(requestCaptor.capture())).thenReturn(mockObjectListing);
         when(mockObjectListing.getObjectSummaries()).thenReturn(objectSummaries);
         when(mockObjectListing.getMarker()).thenReturn(null);

@@ -8,6 +8,8 @@ import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.model.ListObjectsRequest;
 import com.amazonaws.services.s3.model.ObjectListing;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
+import uk.gov.justice.digital.clients.s3.DefaultS3ClientBuilderBuilder;
+import uk.gov.justice.digital.clients.s3.S3ClientBuilder;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -29,13 +31,13 @@ import java.util.*;
  */
 public class S3FileTransferLambda implements RequestHandler<Map<String, String>, Void> {
 
-    private final S3Client s3ClientBuilder;
+    private final S3ClientBuilder s3ClientBuilder;
 
     public S3FileTransferLambda() {
-        this.s3ClientBuilder = new DefaultS3Client();
+        this.s3ClientBuilder = new DefaultS3ClientBuilderBuilder();
     }
 
-    public S3FileTransferLambda(S3Client s3ClientBuilder) {
+    public S3FileTransferLambda(S3ClientBuilder s3ClientBuilder) {
         this.s3ClientBuilder = s3ClientBuilder;
     }
 
@@ -73,7 +75,7 @@ public class S3FileTransferLambda implements RequestHandler<Map<String, String>,
 
         final AmazonS3 s3 = s3ClientBuilder.buildClient(region);
 
-        logger.log(String.format("Moving S3 objects older than %d from %s to %s", retentionDays, sourceBucket, destinationBucket));
+        logger.log(String.format("Moving S3 objects older than %d day(s) from %s to %s", retentionDays, sourceBucket, destinationBucket));
 
         logger.log("Listing files in S3 source location: " + sourceBucket);
         List<String> objectKeys = getObjectsList(s3, sourceBucket, sourceFolder, retentionDays);
