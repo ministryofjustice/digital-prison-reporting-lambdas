@@ -73,7 +73,7 @@ public class StepFunctionDMSNotificationLambda implements RequestHandler<Map<Str
     final static String DEFAULT_REGION = "eu-west-2";
     // Optional aws region. Defaults to eu-west-2
     final static String AWS_REGION_KEY = "awsRegion";
-    final static String DYNAMO_DB_TABLE = "dpr-step-functions-states";
+    final static String DYNAMO_DB_TABLE = "dpr-step-function-tokens";
     // Optional task token. Present for a DMS start action and will be saved in DynamoDB.
     // When absent, means the Lambda should stop the step-function using the saved token in Dynamo.
     final static String TASK_TOKEN_KEY = "token";
