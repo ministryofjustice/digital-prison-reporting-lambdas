@@ -82,6 +82,7 @@ public class StepFunctionDMSNotificationLambdaTest {
     @Test
     public void shouldSaveTaskTokenToDynamoDb() {
         Map<String, Object> registerTokenEvent = createRegisterTaskTokenEvent();
+        long expectedExpiry = fixedDateTime.plusDays(1).toEpochSecond(ZoneOffset.UTC);
 
         underTest.handleRequest(registerTokenEvent, contextMock);
 
@@ -91,6 +92,7 @@ public class StepFunctionDMSNotificationLambdaTest {
         assertThat(actualItem.get(REPLICATION_TASK_ARN_KEY).getS(), equalTo(TEST_TASK_ARN));
         assertThat(actualItem.get(TASK_TOKEN_KEY).getS(), equalTo(TEST_TOKEN));
         assertThat(actualItem.get(CREATED_AT_KEY).getS(), equalTo(fixedDateTime.format(DateTimeFormatter.ISO_DATE_TIME)));
+        assertThat(actualItem.get(EXPIRE_AT_KEY).getN(), equalTo(String.valueOf(expectedExpiry)));
     }
 
     @Test

@@ -14,6 +14,7 @@ import uk.gov.justice.digital.clients.stepfunctions.StepFunctionsClientBuilder;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Map;
@@ -78,6 +79,7 @@ public class StepFunctionDMSNotificationLambda implements RequestHandler<Map<Str
     final static String TASK_TOKEN_KEY = "token";
     final static String REPLICATION_TASK_ARN_KEY = "replicationTaskArn";
     final static String CREATED_AT_KEY = "createdAt";
+    final static String EXPIRE_AT_KEY = "expireAt";
     final static String CLOUDWATCH_EVENT_RESOURCES_KEY = "resources";
 
     @Override
@@ -137,12 +139,17 @@ public class StepFunctionDMSNotificationLambda implements RequestHandler<Map<Str
     }
 
     private void registerTaskToken(String inputToken, String taskArn, AmazonDynamoDB dynamoDb) {
-        String createdAt = LocalDateTime.now(clock).format(DateTimeFormatter.ISO_DATE_TIME);
+        LocalDateTime now = LocalDateTime.now(clock);
+        String createdAt = now.format(DateTimeFormatter.ISO_DATE_TIME);
+        long expireAt = now.plusDays(1).toEpochSecond(ZoneOffset.UTC);
+        AttributeValue expiryAttribute = new AttributeValue().withN(String.valueOf(expireAt));
+
         Map<String, AttributeValue> item = Map
                 .of(
                         REPLICATION_TASK_ARN_KEY, new AttributeValue(taskArn),
                         TASK_TOKEN_KEY, new AttributeValue(inputToken),
-                        CREATED_AT_KEY, new AttributeValue(createdAt)
+                        CREATED_AT_KEY, new AttributeValue(createdAt),
+                        EXPIRE_AT_KEY, expiryAttribute
                 );
         PutItemRequest putTokenRequest = new PutItemRequest(DYNAMO_DB_TABLE, item);
         dynamoDb.putItem(putTokenRequest);
