@@ -1,4 +1,4 @@
-package uk.gov.justice.digital.lambda;
+package lambda;
 
 import com.amazonaws.AmazonServiceException;
 import com.amazonaws.services.lambda.runtime.Context;
@@ -8,6 +8,8 @@ import com.amazonaws.services.s3.model.CopyObjectResult;
 import com.amazonaws.services.s3.model.ListObjectsRequest;
 import com.amazonaws.services.s3.model.ObjectListing;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
+import com.amazonaws.services.stepfunctions.AWSStepFunctions;
+import com.amazonaws.services.stepfunctions.model.SendTaskSuccessRequest;
 import com.github.stefanbirkner.systemlambda.SystemLambda;
 import org.hamcrest.Matchers;
 import org.junit.jupiter.api.BeforeEach;
@@ -17,9 +19,13 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import uk.gov.justice.digital.clients.s3.S3Client;
+import uk.gov.justice.digital.clients.s3.S3Provider;
+import uk.gov.justice.digital.clients.stepfunctions.StepFunctionsClient;
+import uk.gov.justice.digital.clients.stepfunctions.StepFunctionsProvider;
+import uk.gov.justice.digital.lambda.S3FileTransferLambda;
 
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.*;
 
@@ -31,19 +37,26 @@ import static org.mockito.AdditionalMatchers.not;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
+import static uk.gov.justice.digital.common.Utils.TASK_TOKEN_KEY;
 import static uk.gov.justice.digital.lambda.S3FileTransferLambda.*;
+import static lambda.test.Fixture.TEST_TOKEN;
+import static lambda.test.Fixture.fixedClock;
 
 @ExtendWith(MockitoExtension.class)
-public class S3FileTransferLambdaTest {
+public class S3FileTransferLambdaIntegrationTest {
 
     @Mock
     private Context contextMock;
     @Mock
     private LambdaLogger mockLogger;
     @Mock
-    private S3Client s3ClientBuilder;
+    private S3Provider mockS3Provider;
+    @Mock
+    private StepFunctionsProvider mockStepFunctionsProvider;
     @Mock
     private AmazonS3 mockS3;
+    @Mock
+    private AWSStepFunctions mockStepFunctions;
     @Mock
     private ObjectListing mockObjectListing;
 
@@ -51,28 +64,38 @@ public class S3FileTransferLambdaTest {
     ArgumentCaptor<String> copySourceKeyCaptor, copyDestinationKeyCaptor, deleteKeyCaptor;
 
     @Captor
-    ArgumentCaptor<ListObjectsRequest> requestCaptor;
+    ArgumentCaptor<ListObjectsRequest> listObjectsRequestCaptor;
 
-    ZoneId utcZoneId = ZoneId.of("UTC");
+    @Captor
+    ArgumentCaptor<SendTaskSuccessRequest> sendStepFunctionsSuccessRequestCapture;
 
-    private final String SOURCE_BUCKET = "source-bucket";
-    private final String DESTINATION_BUCKET = "destination-bucket";
+    private final static String SOURCE_BUCKET = "source-bucket";
+    private final static String DESTINATION_BUCKET = "destination-bucket";
+
+    private static final LocalDateTime fixedDateTime = LocalDateTime.now(fixedClock);
 
     private S3FileTransferLambda underTest;
 
     @BeforeEach
     public void setup() {
         when(contextMock.getLogger()).thenReturn(mockLogger);
-        doNothing().when(mockLogger).log(anyString());
+        doNothing().when(mockLogger).log(anyString(), any());
+        when(mockS3Provider.buildClient()).thenReturn(mockS3);
+        when(mockStepFunctionsProvider.buildClient()).thenReturn(mockStepFunctions);
 
-        underTest = new S3FileTransferLambda(s3ClientBuilder);
+        underTest = new S3FileTransferLambda(
+                new S3Client(mockS3Provider),
+                new StepFunctionsClient(mockStepFunctionsProvider),
+                fixedClock
+        );
     }
 
     @Test
-    public void shouldMoveParquetObjectsFromSourceToDestinationBucket() {
-        Map<String, String> event = createEvent();
+    public void shouldMoveParquetObjectsAndNotifyStepFunctionWhenThereIsATaskToken() {
+        Map<String, Object> event = createEvent();
+        event.put(TASK_TOKEN_KEY, TEST_TOKEN);
 
-        Date lastModifiedDate = Date.from(LocalDateTime.now(utcZoneId).minusHours(2L).toInstant(ZoneOffset.UTC));
+        Date lastModifiedDate = Date.from(fixedDateTime.minusHours(2L).toInstant(ZoneOffset.UTC));
         List<S3ObjectSummary> objectSummaries = createObjectSummaries(lastModifiedDate);
 
         List<String> expectedKeys = new ArrayList<>();
@@ -94,11 +117,49 @@ public class S3FileTransferLambdaTest {
                 copyDestinationKeyCaptor.capture()
         );
 
-        assertThat(requestCaptor.getValue().getPrefix(), Matchers.equalTo(""));
+        assertThat(listObjectsRequestCaptor.getValue().getPrefix(), Matchers.equalTo(""));
         assertThat(copySourceKeyCaptor.getAllValues(), everyItem(is(in(expectedKeys))));
         assertThat(copyDestinationKeyCaptor.getAllValues(), everyItem(is(in(expectedKeys))));
 
         verify(mockS3, times(expectedKeys.size())).deleteObject(eq(SOURCE_BUCKET), deleteKeyCaptor.capture());
+        verify(mockStepFunctions, times(1))
+                .sendTaskSuccess(sendStepFunctionsSuccessRequestCapture.capture());
+
+        assertThat(deleteKeyCaptor.getAllValues(), everyItem(is(in(expectedKeys))));
+    }
+
+    @Test
+    public void shouldNotNotifyStepFunctionWhenThereIsNoTaskToken() {
+        Map<String, Object> event = createEvent();
+
+        Date lastModifiedDate = Date.from(fixedDateTime.minusHours(2L).toInstant(ZoneOffset.UTC));
+        List<S3ObjectSummary> objectSummaries = createObjectSummaries(lastModifiedDate);
+
+        List<String> expectedKeys = new ArrayList<>();
+        expectedKeys.add("1.parquet");
+        expectedKeys.add("3.parquet");
+        expectedKeys.add("folder1/4.parquet");
+        expectedKeys.add("folder1/5.parquet");
+        expectedKeys.add("folder1/folder2/6.parquet");
+        expectedKeys.add("folder3/8.parquet");
+
+        mockS3ObjectListing(objectSummaries);
+
+        underTest.handleRequest(event, contextMock);
+
+        verify(mockS3, times(expectedKeys.size())).copyObject(
+                eq(SOURCE_BUCKET),
+                copySourceKeyCaptor.capture(),
+                eq(DESTINATION_BUCKET),
+                copyDestinationKeyCaptor.capture()
+        );
+
+        assertThat(listObjectsRequestCaptor.getValue().getPrefix(), Matchers.equalTo(""));
+        assertThat(copySourceKeyCaptor.getAllValues(), everyItem(is(in(expectedKeys))));
+        assertThat(copyDestinationKeyCaptor.getAllValues(), everyItem(is(in(expectedKeys))));
+
+        verify(mockS3, times(expectedKeys.size())).deleteObject(eq(SOURCE_BUCKET), deleteKeyCaptor.capture());
+        verifyNoInteractions(mockStepFunctions);
 
         assertThat(deleteKeyCaptor.getAllValues(), everyItem(is(in(expectedKeys))));
     }
@@ -107,13 +168,11 @@ public class S3FileTransferLambdaTest {
     public void shouldOnlyMoveFilesOlderThanRetentionDays() {
         String expectedKey = "3.parquet";
 
-        Map<String, String> event = createEvent();
+        Map<String, Object> event = createEvent();
         event.put(RETENTION_DAYS_KEY, "1");
 
-        LocalDateTime now = LocalDateTime.now(utcZoneId);
-
-        Date lastModifiedDate = Date.from(now.toInstant(ZoneOffset.UTC));
-        Date lastModifiedDateOld = Date.from(now.minusDays(1).toInstant(ZoneOffset.UTC));
+        Date lastModifiedDate = Date.from(fixedDateTime.toInstant(ZoneOffset.UTC));
+        Date lastModifiedDateOld = Date.from(fixedDateTime.minusDays(1).toInstant(ZoneOffset.UTC));
 
         List<S3ObjectSummary> objectSummaries = new ArrayList<>();
         objectSummaries.add(createObjectSummary("1.parquet", lastModifiedDate));
@@ -130,9 +189,9 @@ public class S3FileTransferLambdaTest {
     @Test
     public void shouldOnlyDeleteParquetObjectsCopiedSuccessfully() throws Exception {
         String expectedDeleteKey = "folder1/5.parquet";
-        Map<String, String> event = createEvent();
+        Map<String, Object> event = createEvent();
 
-        Date lastModifiedDate = Date.from(LocalDateTime.now(utcZoneId).minusHours(2L).toInstant(ZoneOffset.UTC));
+        Date lastModifiedDate = Date.from(LocalDateTime.now(fixedClock).minusHours(2L).toInstant(ZoneOffset.UTC));
         List<S3ObjectSummary> objectSummaries = createObjectSummaries(lastModifiedDate);
 
         mockS3ObjectListing(objectSummaries);
@@ -154,21 +213,21 @@ public class S3FileTransferLambdaTest {
     public void shouldApplyFolderPrefixWhenListingObjects() {
         String folder = "folder1/";
 
-        Map<String, String> event = createEvent();
+        Map<String, Object> event = createEvent();
         event.put(SOURCE_FOLDER_KEY, folder);
 
-        Date lastModifiedDate = Date.from(LocalDateTime.now(utcZoneId).minusHours(2L).toInstant(ZoneOffset.UTC));
+        Date lastModifiedDate = Date.from(fixedDateTime.minusHours(2L).toInstant(ZoneOffset.UTC));
         List<S3ObjectSummary> objectSummaries = createObjectSummaries(lastModifiedDate);
 
         mockS3ObjectListing(objectSummaries);
 
         underTest.handleRequest(event, contextMock);
 
-        assertThat(requestCaptor.getValue().getPrefix(), Matchers.equalTo(folder));
+        assertThat(listObjectsRequestCaptor.getValue().getPrefix(), Matchers.equalTo(folder));
     }
 
-    private Map<String, String> createEvent() {
-        Map<String, String> event = new HashMap<>();
+    private Map<String, Object> createEvent() {
+        Map<String, Object> event = new HashMap<>();
         event.put(SOURCE_BUCKET_KEY, SOURCE_BUCKET);
         event.put(DESTINATION_BUCKET_KEY, DESTINATION_BUCKET);
         return event;
@@ -183,8 +242,7 @@ public class S3FileTransferLambdaTest {
     }
 
     private void mockS3ObjectListing(List<S3ObjectSummary> objectSummaries) {
-        when(s3ClientBuilder.buildClient(eq(DEFAULT_REGION))).thenReturn(mockS3);
-        when(mockS3.listObjects(requestCaptor.capture())).thenReturn(mockObjectListing);
+        when(mockS3.listObjects(listObjectsRequestCaptor.capture())).thenReturn(mockObjectListing);
         when(mockObjectListing.getObjectSummaries()).thenReturn(objectSummaries);
         when(mockObjectListing.getMarker()).thenReturn(null);
         when(mockObjectListing.isTruncated()).thenReturn(false);
