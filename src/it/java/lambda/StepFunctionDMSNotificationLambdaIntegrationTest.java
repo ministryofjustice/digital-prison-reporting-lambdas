@@ -1,4 +1,4 @@
-package uk.gov.justice.digital.lambda;
+package lambda;
 
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDB;
 import com.amazonaws.services.dynamodbv2.model.AttributeValue;
@@ -16,10 +16,14 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import uk.gov.justice.digital.clients.dynamo.DynamoDbClientBuilder;
-import uk.gov.justice.digital.clients.stepfunctions.StepFunctionsClientBuilder;
+import uk.gov.justice.digital.clients.dynamo.DynamoDbClient;
+import uk.gov.justice.digital.clients.dynamo.DynamoDbProvider;
+import uk.gov.justice.digital.clients.stepfunctions.StepFunctionsClient;
+import uk.gov.justice.digital.clients.stepfunctions.StepFunctionsProvider;
+import uk.gov.justice.digital.lambda.StepFunctionDMSNotificationLambda;
 
-import java.time.*;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -29,22 +33,26 @@ import java.util.Map;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
-import static uk.gov.justice.digital.lambda.StepFunctionDMSNotificationLambda.*;
-import static uk.gov.justice.digital.lambda.StepFunctionDMSNotificationLambda.DEFAULT_REGION;
+import static uk.gov.justice.digital.clients.dynamo.DynamoDbClient.CREATED_AT_KEY;
+import static uk.gov.justice.digital.clients.dynamo.DynamoDbClient.EXPIRE_AT_KEY;
+import static uk.gov.justice.digital.common.Utils.REPLICATION_TASK_ARN_KEY;
+import static uk.gov.justice.digital.common.Utils.TASK_TOKEN_KEY;
+import static lambda.test.Fixture.TEST_TOKEN;
+import static lambda.test.Fixture.fixedClock;
+import static uk.gov.justice.digital.lambda.StepFunctionDMSNotificationLambda.CLOUDWATCH_EVENT_RESOURCES_KEY;
 
 @ExtendWith(MockitoExtension.class)
-public class StepFunctionDMSNotificationLambdaTest {
+public class StepFunctionDMSNotificationLambdaIntegrationTest {
 
     @Mock
     private Context contextMock;
     @Mock
     private LambdaLogger mockLogger;
     @Mock
-    private DynamoDbClientBuilder mockDynamoDbClientBuilder;
+    private DynamoDbProvider mockDynamoDbProvider;
     @Mock
-    private StepFunctionsClientBuilder mockStepFunctionsClientBuilder;
+    private StepFunctionsProvider mockStepFunctionsProvider;
     @Mock
     private AmazonDynamoDB mockDynamoDb;
     @Mock
@@ -57,25 +65,23 @@ public class StepFunctionDMSNotificationLambdaTest {
     @Captor
     ArgumentCaptor<SendTaskSuccessRequest> sendStepFunctionsSuccessRequestCapture;
 
-    private static final LocalDateTime fixedDateTime = LocalDateTime.now();
+    private static final LocalDateTime fixedDateTime = LocalDateTime.now(fixedClock);
 
-    private static final ZoneId utcZoneId = ZoneId.of("UTC");
-
-    private final static String  TEST_TOKEN = "test-token";
-    private final static String  TEST_TASK_ARN = "test-task-arn";
+    private final static String TEST_TASK_ARN = "test-task-arn";
 
     private StepFunctionDMSNotificationLambda underTest;
 
     @BeforeEach
     public void setup() {
         when(contextMock.getLogger()).thenReturn(mockLogger);
-        doNothing().when(mockLogger).log(anyString());
-        when(mockDynamoDbClientBuilder.buildClient(eq(DEFAULT_REGION))).thenReturn(mockDynamoDb);
+        doNothing().when(mockLogger).log(anyString(), any());
+        when(mockDynamoDbProvider.buildClient()).thenReturn(mockDynamoDb);
+        when(mockStepFunctionsProvider.buildClient()).thenReturn(mockStepFunctions);
 
         underTest = new StepFunctionDMSNotificationLambda(
-                mockDynamoDbClientBuilder,
-                mockStepFunctionsClientBuilder,
-                Clock.fixed(fixedDateTime.toInstant(ZoneOffset.UTC), utcZoneId)
+                new DynamoDbClient(mockDynamoDbProvider),
+                new StepFunctionsClient(mockStepFunctionsProvider),
+                fixedClock
         );
     }
 
@@ -101,7 +107,6 @@ public class StepFunctionDMSNotificationLambdaTest {
         GetItemResult getItemResult = new GetItemResult()
                 .withItem(Map.of(TASK_TOKEN_KEY, new AttributeValue(TEST_TOKEN)));
 
-        when(mockStepFunctionsClientBuilder.buildClient(eq(DEFAULT_REGION))).thenReturn(mockStepFunctions);
         when(mockDynamoDb.getItem(getItemRequestCapture.capture()))
                 .thenReturn(getItemResult);
 
@@ -127,7 +132,7 @@ public class StepFunctionDMSNotificationLambdaTest {
 
         underTest.handleRequest(taskStoppedEvent, contextMock);
 
-        verify(mockStepFunctions, never()).sendTaskSuccess(any());
+        verifyNoInteractions(mockStepFunctions);
     }
 
     private Map<String, Object> createRegisterTaskTokenEvent() {
@@ -138,7 +143,7 @@ public class StepFunctionDMSNotificationLambdaTest {
     }
 
     private Map<String, Object> createDMSTaskStoppedEvent() {
-        ArrayList<String>resources = new ArrayList<>();
+        ArrayList<String> resources = new ArrayList<>();
         resources.add(TEST_TASK_ARN);
 
         Map<String, Object> event = new HashMap<>();
