@@ -20,6 +20,11 @@ public class S3Client {
         this.s3 = s3Provider.buildClient();
     }
 
+    public List<String> getObjectsOlderThan(String bucket, String extension, Long retentionDays, Clock clock) {
+        ListObjectsRequest request = new ListObjectsRequest().withBucketName(bucket);
+        return listObjects(extension, retentionDays, clock, request);
+    }
+
     public List<String> getObjectsOlderThan(
             String bucket,
             String folder,
@@ -27,10 +32,13 @@ public class S3Client {
             Long retentionDays,
             Clock clock
     ) {
-        List<String> objectPaths = new LinkedList<>();
         ListObjectsRequest request = new ListObjectsRequest().withBucketName(bucket).withPrefix(folder);
-        LocalDateTime currentDate = LocalDateTime.now(clock);
+        return listObjects(extension, retentionDays, clock, request);
+    }
 
+    private List<String> listObjects(String extension, Long retentionDays, Clock clock, ListObjectsRequest request) {
+        LocalDateTime currentDate = LocalDateTime.now(clock);
+        List<String> objectPaths = new LinkedList<>();
         ObjectListing objectList;
         do {
             objectList = s3.listObjects(request);
@@ -54,5 +62,9 @@ public class S3Client {
     public void moveObject(String objectKey, String sourceBucket, String destinationBucket) {
         s3.copyObject(sourceBucket, objectKey, destinationBucket, objectKey);
         s3.deleteObject(sourceBucket, objectKey);
+    }
+
+    public String getObject(String objectKey, String sourceBucket) {
+        return s3.getObjectAsString(sourceBucket, objectKey);
     }
 }

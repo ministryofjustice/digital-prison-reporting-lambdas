@@ -9,19 +9,19 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import uk.gov.justice.digital.clients.s3.S3Client;
 import uk.gov.justice.digital.clients.stepfunctions.StepFunctionsClient;
+import uk.gov.justice.digital.common.ConfigSourceDetails;
 
 import java.util.*;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.collection.IsEmptyCollection.empty;
+import static org.hamcrest.collection.IsIterableContainingInAnyOrder.containsInAnyOrder;
 import static org.hamcrest.core.Is.is;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
-import static uk.gov.justice.digital.common.Utils.DELIMITER;
-import static uk.gov.justice.digital.common.Utils.FILE_EXTENSION;
-import static uk.gov.justice.digital.services.test.Fixture.containsTheSameElementsInOrderAs;
+import static uk.gov.justice.digital.common.Utils.*;
 import static uk.gov.justice.digital.services.test.Fixture.fixedClock;
 
 @ExtendWith(MockitoExtension.class)
@@ -29,7 +29,8 @@ class S3FileTransferServiceTest {
 
     private static final String SOURCE_BUCKET = "source-bucket";
     private static final String DESTINATION_BUCKET = "destination-bucket";
-    private static final String FOLDER = "test-folder";
+    private static final String CONFIG_BUCKET = "config-bucket";
+    private static final String CONFIG_KEY = "config-key";
     private static final String TOKEN = "token";
     private static final long RETENTION_DAYS = 2L;
 
@@ -49,15 +50,15 @@ class S3FileTransferServiceTest {
 
     @Test
     public void shouldReturnEmptyListWhenThereAreNoParquetFiles() {
-        when(mockS3Client.getObjectsOlderThan(any(), any(), any(), any(), any())).thenReturn(Collections.emptyList());
+        when(mockS3Client.getObjectsOlderThan(any(), any(), any(), any())).thenReturn(Collections.emptyList());
 
-        List<String> result = undertest.listParquetFiles(SOURCE_BUCKET, FOLDER, RETENTION_DAYS);
+        List<String> result = undertest.listParquetFiles(SOURCE_BUCKET, RETENTION_DAYS);
 
         assertThat(result, is(empty()));
     }
 
     @Test
-    public void shouldListOfParquetFiles() {
+    public void shouldReturnListOfParquetFiles() {
         List<String> expected = new ArrayList<>();
         expected.add("file1.parquet");
         expected.add("file2.parquet");
@@ -66,14 +67,78 @@ class S3FileTransferServiceTest {
 
         when(mockS3Client.getObjectsOlderThan(
                 eq(SOURCE_BUCKET),
-                eq(FOLDER + DELIMITER),
                 eq(FILE_EXTENSION),
                 eq(RETENTION_DAYS),
                 eq(fixedClock))).thenReturn(expected);
 
-        List<String> result = undertest.listParquetFiles(SOURCE_BUCKET, FOLDER, RETENTION_DAYS);
+        List<String> result = undertest.listParquetFiles(SOURCE_BUCKET, RETENTION_DAYS);
 
-        assertThat(result, containsTheSameElementsInOrderAs(expected));
+        assertThat(result, containsInAnyOrder(expected.toArray()));
+    }
+
+    @Test
+    public void shouldReturnEmptyListWhenThereAreNoParquetFilesForConfiguredTables() {
+        ConfigSourceDetails configDetails = new ConfigSourceDetails(CONFIG_BUCKET, CONFIG_KEY);
+        String configFileKey = CONFIG_PATH + configDetails.getConfigKey() + CONFIG_FILE_SUFFIX;
+        String configuredTable1 = "schema_1/table_1";
+        String configuredTable2 = "schema_2/table_2";
+
+        when(mockS3Client.getObjectsOlderThan(any(), any(), any(), any(), any())).thenReturn(Collections.emptyList());
+        when(mockS3Client.getObject(configFileKey, configDetails.getBucket()))
+                .thenReturn("{\"tables\": [\"" +
+                        configuredTable1 + "\", \"" +
+                        configuredTable2 + "\", \"" +
+                        configuredTable1 + "\"]}"
+                );
+
+        List<String> result = undertest.listParquetFilesForConfig(SOURCE_BUCKET, configDetails, RETENTION_DAYS);
+
+        assertThat(result, is(empty()));
+    }
+
+    @Test
+    public void shouldReturnListOfParquetFilesRelatedToConfiguredTables() {
+        ConfigSourceDetails configDetails = new ConfigSourceDetails(CONFIG_BUCKET, CONFIG_KEY);
+        String configFileKey = CONFIG_PATH + configDetails.getConfigKey() + CONFIG_FILE_SUFFIX;
+        String configuredTable1 = "schema_1/table_1";
+        String configuredTable2 = "schema_2/table_2";
+
+        List<String> expectedFilesForTable1 = new ArrayList<>();
+        expectedFilesForTable1.add("file1.parquet");
+        expectedFilesForTable1.add("file2.parquet");
+        expectedFilesForTable1.add("file3.parquet");
+
+        List<String> expectedFilesForTable2 = new ArrayList<>();
+        expectedFilesForTable2.add("file4.parquet");
+        expectedFilesForTable2.add("file5.parquet");
+
+        when(mockS3Client.getObject(configFileKey, configDetails.getBucket()))
+                .thenReturn("{\"tables\": [\"" +
+                        configuredTable1 + "\", \"" +
+                        configuredTable2 + "\", \"" +
+                        configuredTable1 + "\"]}"
+                );
+        when(mockS3Client.getObjectsOlderThan(
+                eq(SOURCE_BUCKET),
+                eq(configuredTable1 + DELIMITER),
+                eq(FILE_EXTENSION),
+                eq(RETENTION_DAYS),
+                eq(fixedClock))).thenReturn(expectedFilesForTable1);
+
+        when(mockS3Client.getObjectsOlderThan(
+                eq(SOURCE_BUCKET),
+                eq(configuredTable2 + DELIMITER),
+                eq(FILE_EXTENSION),
+                eq(RETENTION_DAYS),
+                eq(fixedClock))).thenReturn(expectedFilesForTable2);
+
+        List<String> result = undertest.listParquetFilesForConfig(SOURCE_BUCKET, configDetails, RETENTION_DAYS);
+
+        List<String> expectedResult = new ArrayList<>();
+        expectedResult.addAll(expectedFilesForTable1);
+        expectedResult.addAll(expectedFilesForTable2);
+
+        assertThat(result, containsInAnyOrder(expectedResult.toArray()));
     }
 
     @Test

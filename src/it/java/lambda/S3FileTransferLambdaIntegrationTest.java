@@ -11,7 +11,6 @@ import com.amazonaws.services.s3.model.S3ObjectSummary;
 import com.amazonaws.services.stepfunctions.AWSStepFunctions;
 import com.amazonaws.services.stepfunctions.model.SendTaskSuccessRequest;
 import com.github.stefanbirkner.systemlambda.SystemLambda;
-import org.hamcrest.Matchers;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -28,19 +27,20 @@ import uk.gov.justice.digital.lambda.S3FileTransferLambda;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.*;
+import java.util.stream.Collectors;
 
+import static lambda.test.Fixture.TEST_TOKEN;
+import static lambda.test.Fixture.fixedClock;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.is;
-import static org.hamcrest.collection.IsIn.in;
-import static org.hamcrest.core.Every.everyItem;
+import static org.hamcrest.collection.IsIterableContainingInAnyOrder.containsInAnyOrder;
+import static org.hamcrest.core.IsNull.nullValue;
 import static org.mockito.AdditionalMatchers.not;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
-import static uk.gov.justice.digital.common.Utils.TASK_TOKEN_KEY;
+import static uk.gov.justice.digital.common.Utils.*;
 import static uk.gov.justice.digital.lambda.S3FileTransferLambda.*;
-import static lambda.test.Fixture.TEST_TOKEN;
-import static lambda.test.Fixture.fixedClock;
 
 @ExtendWith(MockitoExtension.class)
 public class S3FileTransferLambdaIntegrationTest {
@@ -117,15 +117,15 @@ public class S3FileTransferLambdaIntegrationTest {
                 copyDestinationKeyCaptor.capture()
         );
 
-        assertThat(listObjectsRequestCaptor.getValue().getPrefix(), Matchers.equalTo(""));
-        assertThat(copySourceKeyCaptor.getAllValues(), everyItem(is(in(expectedKeys))));
-        assertThat(copyDestinationKeyCaptor.getAllValues(), everyItem(is(in(expectedKeys))));
+        assertThat(listObjectsRequestCaptor.getValue().getPrefix(), is(nullValue()));
+        assertThat(copySourceKeyCaptor.getAllValues(), containsInAnyOrder(expectedKeys.toArray()));
+        assertThat(copyDestinationKeyCaptor.getAllValues(), containsInAnyOrder(expectedKeys.toArray()));
 
         verify(mockS3, times(expectedKeys.size())).deleteObject(eq(SOURCE_BUCKET), deleteKeyCaptor.capture());
         verify(mockStepFunctions, times(1))
                 .sendTaskSuccess(sendStepFunctionsSuccessRequestCapture.capture());
 
-        assertThat(deleteKeyCaptor.getAllValues(), everyItem(is(in(expectedKeys))));
+        assertThat(deleteKeyCaptor.getAllValues(), containsInAnyOrder(expectedKeys.toArray()));
     }
 
     @Test
@@ -154,14 +154,14 @@ public class S3FileTransferLambdaIntegrationTest {
                 copyDestinationKeyCaptor.capture()
         );
 
-        assertThat(listObjectsRequestCaptor.getValue().getPrefix(), Matchers.equalTo(""));
-        assertThat(copySourceKeyCaptor.getAllValues(), everyItem(is(in(expectedKeys))));
-        assertThat(copyDestinationKeyCaptor.getAllValues(), everyItem(is(in(expectedKeys))));
+        assertThat(listObjectsRequestCaptor.getValue().getPrefix(), is(nullValue()));
+        assertThat(copySourceKeyCaptor.getAllValues(), containsInAnyOrder(expectedKeys.toArray()));
+        assertThat(copyDestinationKeyCaptor.getAllValues(), containsInAnyOrder(expectedKeys.toArray()));
 
         verify(mockS3, times(expectedKeys.size())).deleteObject(eq(SOURCE_BUCKET), deleteKeyCaptor.capture());
         verifyNoInteractions(mockStepFunctions);
 
-        assertThat(deleteKeyCaptor.getAllValues(), everyItem(is(in(expectedKeys))));
+        assertThat(deleteKeyCaptor.getAllValues(), containsInAnyOrder(expectedKeys.toArray()));
     }
 
     @Test
@@ -210,20 +210,29 @@ public class S3FileTransferLambdaIntegrationTest {
     }
 
     @Test
-    public void shouldApplyFolderPrefixWhenListingObjects() {
-        String folder = "folder1/";
+    public void shouldOnlyListFilesBelongingToConfiguredTables() {
+        String configKey = "test-config-key";
+        String configBucket = "test-config-bucket";
+
+        String configuredTable1 = "schema_1/table_1";
+        String configuredTable2 = "schema_2/table_2";
 
         Map<String, Object> event = createEvent();
-        event.put(SOURCE_FOLDER_KEY, folder);
+        event.put(CONFIG_OBJECT_KEY, Map.of(CONFIG_KEY, configKey, CONFIG_BUCKET, configBucket));
 
         Date lastModifiedDate = Date.from(fixedDateTime.minusHours(2L).toInstant(ZoneOffset.UTC));
         List<S3ObjectSummary> objectSummaries = createObjectSummaries(lastModifiedDate);
 
         mockS3ObjectListing(objectSummaries);
+        when(mockS3.getObjectAsString(configBucket, CONFIG_PATH + configKey + CONFIG_FILE_SUFFIX))
+                .thenReturn("{\"tables\": [\"" + configuredTable1 + "\", \"" + configuredTable2 + "\"]}");
 
         underTest.handleRequest(event, contextMock);
 
-        assertThat(listObjectsRequestCaptor.getValue().getPrefix(), Matchers.equalTo(folder));
+        assertThat(
+                listObjectsRequestCaptor.getAllValues().stream().map(ListObjectsRequest::getPrefix).collect(Collectors.toList()),
+                containsInAnyOrder(configuredTable1 + DELIMITER, configuredTable2 + DELIMITER)
+        );
     }
 
     private Map<String, Object> createEvent() {
