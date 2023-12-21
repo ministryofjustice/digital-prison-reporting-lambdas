@@ -3,17 +3,16 @@ package uk.gov.justice.digital.services;
 import com.amazonaws.AmazonServiceException;
 import com.amazonaws.services.lambda.runtime.LambdaLogger;
 import com.amazonaws.services.lambda.runtime.logging.LogLevel;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import uk.gov.justice.digital.clients.s3.S3Client;
 import uk.gov.justice.digital.clients.stepfunctions.StepFunctionsClient;
+import uk.gov.justice.digital.common.ConfigSourceDetails;
 
 import java.time.Clock;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
+import java.util.stream.Collectors;
 
-import static uk.gov.justice.digital.common.Utils.DELIMITER;
-import static uk.gov.justice.digital.common.Utils.FILE_EXTENSION;
+import static uk.gov.justice.digital.common.Utils.*;
 
 public class S3FileTransferService {
 
@@ -31,12 +30,16 @@ public class S3FileTransferService {
         this.clock = clock;
     }
 
-    public List<String> listParquetFiles(String bucket, String folder, Long retentionDays) {
-        if (!folder.isEmpty() && !folder.endsWith(DELIMITER)) {
-            folder = folder + DELIMITER;
-        }
+    public List<String> listParquetFiles(String bucket, Long retentionDays) {
+        return s3Client.getObjectsOlderThan(bucket, FILE_EXTENSION, retentionDays, clock);
+    }
 
-        return s3Client.getObjectsOlderThan(bucket, folder, FILE_EXTENSION, retentionDays, clock);
+    public List<String> listParquetFilesForConfig(String sourceBucket, ConfigSourceDetails configDetails, Long retentionDays) {
+        Set<String> configuredTables = getConfiguredTables(configDetails);
+
+        return configuredTables.stream()
+                .flatMap(configuredTable -> listFilesForTable(sourceBucket, retentionDays, configuredTable).stream())
+                .collect(Collectors.toList());
     }
 
     public Set<String> moveObjects(
@@ -64,5 +67,26 @@ public class S3FileTransferService {
         );
 
         return failedObjects;
+    }
+
+    private List<String> listFilesForTable(String sourceBucket, Long retentionDays, String configuredTable) {
+        return s3Client.getObjectsOlderThan(
+                sourceBucket,
+                configuredTable + DELIMITER, FILE_EXTENSION,
+                retentionDays,
+                clock
+        );
+    }
+
+    @SuppressWarnings({"unchecked"})
+    private Set<String> getConfiguredTables(ConfigSourceDetails configDetails) {
+        try {
+            String configFileKey = CONFIG_PATH + configDetails.getConfigKey() + CONFIG_FILE_SUFFIX;
+            String configString = s3Client.getObject(configFileKey, configDetails.getBucket());
+            HashMap<String, ArrayList<String>> config = new ObjectMapper().readValue(configString, HashMap.class);
+            return new HashSet<>(config.get("tables"));
+        } catch (Exception e) {
+            throw new RuntimeException("Exception when loading config", e);
+        }
     }
 }
