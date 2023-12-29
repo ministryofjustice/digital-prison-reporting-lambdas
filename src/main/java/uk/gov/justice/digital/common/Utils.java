@@ -13,7 +13,7 @@ public class Utils {
     public final static String DELIMITER = "/";
     public final static String FILE_EXTENSION = ".parquet";
     public final static String CONFIG_PATH = "configs/";
-    public final static String CONFIG_FILE_SUFFIX = "_config.json";
+    public final static String CONFIG_FILE_SUFFIX = "/table-config.json";
 
     public static Optional<String> getOptionalString(Map<String, Object> event, String key) {
         return Optional.ofNullable(event.get(key)).map(obj -> (String) obj);
