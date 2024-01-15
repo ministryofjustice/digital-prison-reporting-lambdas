@@ -25,7 +25,7 @@ import static uk.gov.justice.digital.common.Utils.*;
 import static uk.gov.justice.digital.services.test.Fixture.fixedClock;
 
 @ExtendWith(MockitoExtension.class)
-class S3FileTransferServiceTest {
+class S3FileServiceTest {
 
     private static final String SOURCE_BUCKET = "source-bucket";
     private static final String DESTINATION_BUCKET = "destination-bucket";
@@ -41,11 +41,11 @@ class S3FileTransferServiceTest {
     @Mock
     LambdaLogger mockLambdaLogger;
 
-    private S3FileTransferService undertest;
+    private S3FileService undertest;
 
     @BeforeEach
     public void setup() {
-        undertest = new S3FileTransferService(mockS3Client, mockStepFunctionsClient, fixedClock);
+        undertest = new S3FileService(mockS3Client, mockStepFunctionsClient, fixedClock);
     }
 
     @Test
@@ -154,7 +154,7 @@ class S3FileTransferServiceTest {
         Set<String> failedObjects = undertest.moveObjects(mockLambdaLogger, objectKeys, SOURCE_BUCKET, DESTINATION_BUCKET, TOKEN);
 
         verify(mockS3Client, times(objectKeys.size())).moveObject(any(), eq(SOURCE_BUCKET), eq(DESTINATION_BUCKET));
-        verify(mockStepFunctionsClient, times(1)).notifyStepFunction(eq(TOKEN));
+        verify(mockStepFunctionsClient, times(1)).notifyStepFunctionSuccess(eq(TOKEN));
 
         assertThat(failedObjects, is(empty()));
     }
@@ -178,8 +178,47 @@ class S3FileTransferServiceTest {
 
         Set<String> failedObjects = undertest.moveObjects(mockLambdaLogger, objectKeys, SOURCE_BUCKET, DESTINATION_BUCKET, TOKEN);
 
-        verify(mockStepFunctionsClient, times(1)).notifyStepFunction(eq("token"));
+        verify(mockStepFunctionsClient, times(1)).notifyStepFunctionSuccess(eq("token"));
 
         assertEquals(failedObjects, expectedFailedObjects);
+    }
+
+    @Test
+    public void shouldDeleteObjectsFromS3() {
+        List<String> objectKeys = new ArrayList<>();
+        objectKeys.add("file1.parquet");
+        objectKeys.add("file2.parquet");
+        objectKeys.add("file3.parquet");
+        objectKeys.add("file4.parquet");
+
+        Set<String> failedObjects = undertest.deleteObjects(mockLambdaLogger, objectKeys, SOURCE_BUCKET);
+
+        verify(mockS3Client, times(objectKeys.size())).deleteObject(any(), eq(SOURCE_BUCKET));
+
+        assertThat(failedObjects, is(empty()));
+    }
+
+    @Test
+    public void shouldReturnListOfObjectsWhichFailedDeletion() {
+        List<String> objectKeys = new ArrayList<>();
+        objectKeys.add("file1.parquet");
+        objectKeys.add("file2.parquet");
+        objectKeys.add("file3.parquet");
+        objectKeys.add("file4.parquet");
+
+        doNothing().when(mockLambdaLogger).log(anyString(), any());
+
+        doNothing().when(mockS3Client).deleteObject(eq("file1.parquet"), eq(SOURCE_BUCKET));
+        doNothing().when(mockS3Client).deleteObject(eq("file3.parquet"), eq(SOURCE_BUCKET));
+
+        doThrow(new AmazonServiceException("failure")).when(mockS3Client).deleteObject(eq("file2.parquet"), eq(SOURCE_BUCKET));
+        doThrow(new AmazonServiceException("failure")).when(mockS3Client).deleteObject(eq("file4.parquet"), eq(SOURCE_BUCKET));
+
+        Set<String> failedObjects = undertest.deleteObjects(mockLambdaLogger, objectKeys, SOURCE_BUCKET);
+
+        List<String> expectedFailedObjects = new ArrayList<>();
+        expectedFailedObjects.add("file2.parquet");
+        expectedFailedObjects.add("file4.parquet");
+        assertThat(failedObjects, containsInAnyOrder(expectedFailedObjects.toArray()));
     }
 }

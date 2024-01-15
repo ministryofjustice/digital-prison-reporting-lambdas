@@ -36,7 +36,7 @@ public class StepFunctionDMSNotificationService {
 
         retrievedToken.ifPresent(token -> {
                     logger.log(String.format("Notifying step functions of success using token %s", token), LogLevel.INFO);
-                    stepFunctionsClient.notifyStepFunction(token);
+                    stepFunctionsClient.notifyStepFunctionSuccess(token);
                 }
         );
 

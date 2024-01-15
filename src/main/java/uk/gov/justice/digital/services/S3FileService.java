@@ -14,13 +14,13 @@ import java.util.stream.Collectors;
 
 import static uk.gov.justice.digital.common.Utils.*;
 
-public class S3FileTransferService {
+public class S3FileService {
 
     private final S3Client s3Client;
     private final StepFunctionsClient stepFunctionsClient;
     private final Clock clock;
 
-    public S3FileTransferService(
+    public S3FileService(
             S3Client s3Client,
             StepFunctionsClient stepFunctionsClient,
             Clock clock
@@ -62,7 +62,7 @@ public class S3FileTransferService {
 
         Optional.ofNullable(token).ifPresent(retrievedToken -> {
                     logger.log(String.format("Notifying step functions of success using token %s", retrievedToken), LogLevel.INFO);
-                    stepFunctionsClient.notifyStepFunction(retrievedToken);
+                    stepFunctionsClient.notifyStepFunctionSuccess(retrievedToken);
                 }
         );
 
@@ -88,5 +88,20 @@ public class S3FileTransferService {
         } catch (Exception e) {
             throw new RuntimeException("Exception when loading config", e);
         }
+    }
+
+    public Set<String> deleteObjects(LambdaLogger logger, List<String> objectKeys, String sourceBucket) {
+        Set<String> failedObjects = new HashSet<>();
+
+        for (String objectKey : objectKeys) {
+            try {
+                s3Client.deleteObject(objectKey, sourceBucket);
+            } catch (AmazonServiceException e) {
+                logger.log(String.format("Failed to delete S3 object %s: %s", objectKey, e.getErrorMessage()), LogLevel.WARN);
+                failedObjects.add(objectKey);
+            }
+        }
+
+        return failedObjects;
     }
 }
