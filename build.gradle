@@ -40,6 +40,7 @@ dependencies {
     implementation "com.amazonaws:aws-java-sdk-s3:$amazonSdkVersion"
     implementation "com.amazonaws:aws-java-sdk-dynamodb:$amazonSdkVersion"
     implementation "com.amazonaws:aws-java-sdk-stepfunctions:$amazonSdkVersion"
+    implementation "com.amazonaws:aws-java-sdk-glue:$amazonSdkVersion"
     implementation "com.amazonaws:aws-lambda-java-core:$lambdaCoreVersion"
     implementation "com.amazonaws:aws-lambda-java-events:$lambdaJavaEventsVersion"
 

@@ -67,4 +67,8 @@ public class S3Client {
     public String getObject(String objectKey, String sourceBucket) {
         return s3.getObjectAsString(sourceBucket, objectKey);
     }
+
+    public void deleteObject(String objectKey, String sourceBucket) {
+        s3.deleteObject(sourceBucket, objectKey);
+    }
 }

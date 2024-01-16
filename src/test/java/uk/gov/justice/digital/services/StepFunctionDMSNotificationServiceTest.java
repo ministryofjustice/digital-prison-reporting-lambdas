@@ -47,7 +47,7 @@ class StepFunctionDMSNotificationServiceTest {
 
         undertest.processStopEvent(mockLambdaLogger, TABLE, "task-key", TASK_ARN);
 
-        verify(mockStepFunctionsClient, times(1)).notifyStepFunction(eq(TOKEN));
+        verify(mockStepFunctionsClient, times(1)).notifyStepFunctionSuccess(eq(TOKEN));
         verify(mockDynamoDbClient, times(1)).deleteToken(eq(TABLE), any());
     }
 
