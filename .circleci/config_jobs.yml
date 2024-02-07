@@ -1,0 +1,90 @@
+version: 2.1
+
+orbs:
+  reporting: ministryofjustice/hmpps-reporting@1.0.38
+  slack: circleci/slack@4.12.5  
+
+workflows:
+  checkout-build-publish:
+    jobs:
+      - reporting/gradle_owasp_check:
+          notify_slack: false
+          context:
+            - hmpps-reporting-common
+            - hmpps-reporting-orb
+          cache_key: "owasp-build-cache"
+      - reporting/gradle_build_publish:
+          tag: "8.0"
+          app: digital-prison-reporting-jobs
+          app_artifacts_directory: build/libs/
+          bucket_prefix: dpr-artifact-store
+          sync_args: "--exclude '*' --include '*-all*jar'"
+          deploy_script: true
+          deploy_to_test: true # Deploy to Test Environment
+          deploy_to_preprod: true # Deploy to PreProd Environment
+          notify_jira: true
+          notify_slack: true
+          channel: dpr_cicd_alerts
+          command: jar shadowJar # Skip tests when building jar, they've already run
+          filters:
+            branches:
+              only: /.*/
+            tags:
+              ignore: /.*/
+          ref: << pipeline.git.branch >><< pipeline.git.tag >>
+          context:
+            - hmpps-reporting-common
+            - hmpps-reporting-orb
+          cache_key: "dpr-jobs-build-cache"
+      - slack/on-hold:
+          channel: dpr_cicd_approvals
+          filters:
+            branches:
+              only: main
+            tags:
+              ignore: /.*/          
+          context:
+            - hmpps-reporting-common
+          requires: [reporting/gradle_build_publish]
+      - pause_workflow:
+          channel: dpr_cicd_approvals
+          type: approval
+          filters:
+            branches:
+              only: main
+            tags:
+              ignore: /.*/          
+          context:
+            - hmpps-reporting-common
+          requires: [slack/on-hold]
+      - reporting/gradle_promote_live:
+          app: digital-prison-reporting-jobs
+          sync_args: "--exclude '*' --include '*-all*jar'"
+          deploy_script: true
+          release_ready: true
+          notify_slack: true
+          filters:
+            branches:
+              only: main
+            tags:
+              ignore: /.*/
+          requires: [pause_workflow]
+          context:
+            - hmpps-reporting-common          
+
+  owasp-security:
+    triggers:
+      - schedule:
+          cron: "30 6 * * *" ## Runs everyday at 7.30 AM UK TIME 
+          filters:
+            branches:
+              only:
+                - main
+    jobs:
+      - reporting/gradle_owasp_check:
+          notify_slack: true
+          channel: dpr_cicd_alerts
+          context:
+            - hmpps-reporting-common
+            - hmpps-reporting-orb
+          cache_key: "owasp-build-cache"
