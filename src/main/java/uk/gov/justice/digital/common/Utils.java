@@ -9,6 +9,8 @@ public class Utils {
 
     public final static String DEFAULT_DPR_REGION = "eu-west-2";
     public final static String TASK_TOKEN_KEY = "token";
+    public final static String TOKEN_EXPIRY_DAYS_KEY = "tokenExpiryDays";
+    public final static long DEFAULT_TOKEN_EXPIRY_DAYS = 7;
     public final static String REPLICATION_TASK_ARN_KEY = "replicationTaskArn";
 
     public static Optional<String> getOptionalString(Map<String, Object> event, String key) {

@@ -36,10 +36,9 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 import static uk.gov.justice.digital.clients.dynamo.DynamoDbClient.CREATED_AT_KEY;
 import static uk.gov.justice.digital.clients.dynamo.DynamoDbClient.EXPIRE_AT_KEY;
-import static uk.gov.justice.digital.common.Utils.REPLICATION_TASK_ARN_KEY;
-import static uk.gov.justice.digital.common.Utils.TASK_TOKEN_KEY;
 import static lambda.test.Fixture.TEST_TOKEN;
 import static lambda.test.Fixture.fixedClock;
+import static uk.gov.justice.digital.common.Utils.*;
 import static uk.gov.justice.digital.lambda.StepFunctionDMSNotificationLambda.CLOUDWATCH_EVENT_RESOURCES_KEY;
 
 @ExtendWith(MockitoExtension.class)
@@ -68,6 +67,7 @@ public class StepFunctionDMSNotificationLambdaIntegrationTest {
     private static final LocalDateTime fixedDateTime = LocalDateTime.now(fixedClock);
 
     private final static String TEST_TASK_ARN = "test-task-arn";
+    private final static Long TEST_TOKEN_EXPIRY_DAYS = 2L;
 
     private StepFunctionDMSNotificationLambda underTest;
 
@@ -88,7 +88,7 @@ public class StepFunctionDMSNotificationLambdaIntegrationTest {
     @Test
     public void shouldSaveTaskTokenToDynamoDb() {
         Map<String, Object> registerTokenEvent = createRegisterTaskTokenEvent();
-        long expectedExpiry = fixedDateTime.plusDays(1).toEpochSecond(ZoneOffset.UTC);
+        long expectedExpiry = fixedDateTime.plusDays(TEST_TOKEN_EXPIRY_DAYS).toEpochSecond(ZoneOffset.UTC);
 
         underTest.handleRequest(registerTokenEvent, contextMock);
 
@@ -139,6 +139,7 @@ public class StepFunctionDMSNotificationLambdaIntegrationTest {
         Map<String, Object> event = new HashMap<>();
         event.put(TASK_TOKEN_KEY, TEST_TOKEN);
         event.put(REPLICATION_TASK_ARN_KEY, TEST_TASK_ARN);
+        event.put(TOKEN_EXPIRY_DAYS_KEY, TEST_TOKEN_EXPIRY_DAYS.toString());
         return event;
     }
 

@@ -44,10 +44,10 @@ public class StepFunctionDMSNotificationService {
         dynamoDbClient.deleteToken(dynamoTable, itemKey);
     }
 
-    public void registerTaskToken(String inputToken, String taskArn, String table) {
+    public void registerTaskToken(String inputToken, String taskArn, String table, Long tokenExpiryDays) {
         LocalDateTime now = LocalDateTime.now(clock);
         String createdAt = now.format(DateTimeFormatter.ISO_DATE_TIME);
-        long expireAt = now.plusDays(1).toEpochSecond(ZoneOffset.UTC);
+        long expireAt = now.plusDays(tokenExpiryDays).toEpochSecond(ZoneOffset.UTC);
 
         dynamoDbClient.saveToken(table, taskArn, inputToken, expireAt, createdAt);
     }
