@@ -36,6 +36,9 @@ workflows:
             - hmpps-reporting-common
             - hmpps-reporting-orb
           cache_key: "dpr-lambdas-build-cache"
+          extra_args:
+            refresh_lambda: true
+            refresh_function: dpr-pipeline-notification-function
 
   owasp-security:
     triggers:
