@@ -20,7 +20,6 @@ workflows:
           bucket_prefix: dpr-artifact-store
           sync_args: "--exclude '*' --include '*-all*jar'"
           deploy_to_test: true # Deploy to Test Environment
-          deploy_to_preprod: true # Deploy to PreProd Environment
           refresh_lambda: true
           refresh_function: dpr-pipeline-notification-function
           notify_jira: true
