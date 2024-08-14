@@ -6,8 +6,8 @@ import software.amazon.awssdk.services.redshiftdata.RedshiftDataClient;
 import software.amazon.awssdk.services.redshiftdata.model.*;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
-import static java.lang.Math.min;
 import static java.lang.String.format;
 import static java.lang.String.join;
 import static java.util.Collections.emptyList;
@@ -21,7 +21,6 @@ public class RedShiftTableExpiryService {
             "FROM SVV_EXTERNAL_TABLES " +
             "WHERE schemaname = 'reports' " +
             "AND json_extract_path_text(parameters, 'transient_lastDdlTime', TRUE) < (EXTRACT(EPOCH FROM GETDATE()) - %d)";
-    private static final int MAX_BATCH_SIZE = 40;
 
     public static final int STATEMENT_STATUS_CHECK_DELAY_MILLIS = 1000;
 
@@ -87,31 +86,20 @@ public class RedShiftTableExpiryService {
     }
 
     private void removeExternalTables(List<String> tableNames, LambdaLogger logger) throws InterruptedException {
-        List<String> dropStatements = tableNames.stream()
+        String dropStatements = tableNames.stream()
                 .map(tableName -> format(DROP_STATEMENT, tableName))
-                .collect(toList());
+                .collect(Collectors.joining("\n"));
 
-        int numberOfBatches = (dropStatements.size() + MAX_BATCH_SIZE - 1) / MAX_BATCH_SIZE;
+        logger.log(format("Dropping tables:\n%s", dropStatements));
 
-        for (int i = 0; i < numberOfBatches; i++) {
-            int batchStart = i * MAX_BATCH_SIZE;
-            int batchEnd = min(dropStatements.size(), (i + 1) * MAX_BATCH_SIZE);
-
-            logger.log(format("Removing tables %d to %d", batchStart + 1, batchEnd));
-
-            removeExternalTableBatch(dropStatements.subList(batchStart, batchEnd), logger);
-        }
-    }
-
-    private void removeExternalTableBatch(List<String> batch, LambdaLogger logger) throws InterruptedException {
-        var statementRequest = BatchExecuteStatementRequest.builder()
+        var statementRequest = ExecuteStatementRequest.builder()
                 .clusterIdentifier(clusterId)
                 .database(databaseName)
                 .secretArn(secretArn)
-                .sqls(batch)
+                .sql(dropStatements)
                 .build();
 
-        var response = dataClient.batchExecuteStatement(statementRequest);
+        var response = dataClient.executeStatement(statementRequest);
         requestCompletesSuccessfully(response.id(), logger);
     }
 
