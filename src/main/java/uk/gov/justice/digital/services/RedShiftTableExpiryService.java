@@ -50,7 +50,7 @@ public class RedShiftTableExpiryService {
             var expiredTableNames = getExpiredExternalTableNames(logger);
             logger.log(format("Found %d tables to remove", expiredTableNames.size()), LogLevel.INFO);
 
-            if (expiredTableNames.size() > 0) {
+            if (!expiredTableNames.isEmpty()) {
                 removeExternalTables(expiredTableNames, logger);
                 logger.log(
                         format("Removed %d tables:\n%s", expiredTableNames.size(), join("\n", expiredTableNames)),
