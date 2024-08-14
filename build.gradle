@@ -10,7 +10,7 @@ plugins {
 
 group 'uk.gov.justice'
 
-version "${version != 'unspecified' ? version : '0.0.12-SNAPSHOT'}"
+version "${version != 'unspecified' ? version : '0.0.13-SNAPSHOT'}"
 
 java {
     sourceCompatibility = JavaVersion.VERSION_11
