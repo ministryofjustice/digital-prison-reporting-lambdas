@@ -47,7 +47,8 @@ class RedShiftTableExpiryServiceTest {
 
         // Get list of expired tables
         when(dataClient.executeStatement((ExecuteStatementRequest) any()))
-                .thenReturn(ExecuteStatementResponse.builder().id(getTableId).build());
+                .thenReturn(ExecuteStatementResponse.builder().id(getTableId).build())
+                .thenReturn(ExecuteStatementResponse.builder().id(removeTableId).build());
         when(dataClient.describeStatement(DescribeStatementRequest.builder().id(getTableId).build()))
                 .thenReturn(DescribeStatementResponse.builder().status(StatusString.STARTED).build())
                 .thenReturn(DescribeStatementResponse.builder().status(StatusString.FINISHED).build());
@@ -55,17 +56,15 @@ class RedShiftTableExpiryServiceTest {
                 .thenReturn(GetStatementResultResponse.builder().records(records).build());
 
         // Remove tables
-        when(dataClient.batchExecuteStatement((BatchExecuteStatementRequest) any()))
-                .thenReturn(BatchExecuteStatementResponse.builder().id(removeTableId).build());
         when(dataClient.describeStatement(DescribeStatementRequest.builder().id(removeTableId).build()))
                 .thenReturn(DescribeStatementResponse.builder().status(StatusString.STARTED).build())
                 .thenReturn(DescribeStatementResponse.builder().status(StatusString.FINISHED).build());
 
         undertest.removeExpiredExternalTables(mockLambdaLogger);
 
-        verify(dataClient).executeStatement((ExecuteStatementRequest) any());
-        verify(dataClient).batchExecuteStatement((BatchExecuteStatementRequest) any());
+        verify(dataClient, times(2)).executeStatement((ExecuteStatementRequest) any());
         verify(dataClient).getStatementResult((GetStatementResultRequest) any());
-        verify(dataClient, times(4)).describeStatement((DescribeStatementRequest) any());
+        verify(dataClient, times(2)).describeStatement(DescribeStatementRequest.builder().id(getTableId).build());
+        verify(dataClient, times(2)).describeStatement(DescribeStatementRequest.builder().id(removeTableId).build());
     }
 }
