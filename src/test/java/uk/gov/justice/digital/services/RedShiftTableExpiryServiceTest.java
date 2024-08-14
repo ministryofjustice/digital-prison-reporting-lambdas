@@ -1,6 +1,7 @@
 package uk.gov.justice.digital.services;
 
 import com.amazonaws.services.lambda.runtime.LambdaLogger;
+import com.amazonaws.services.lambda.runtime.logging.LogLevel;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -43,7 +44,7 @@ class RedShiftTableExpiryServiceTest {
         String tableName = "TABLE_NAME";
         Collection<Collection<Field>> records = singletonList(singletonList(Field.builder().stringValue(tableName).build()));
 
-        doNothing().when(mockLambdaLogger).log(anyString());
+        doNothing().when(mockLambdaLogger).log(anyString(), eq(LogLevel.INFO));
 
         // Get list of expired tables
         when(dataClient.executeStatement((ExecuteStatementRequest) any()))
