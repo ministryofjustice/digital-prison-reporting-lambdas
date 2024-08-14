@@ -48,17 +48,22 @@ public class RedShiftTableExpiryService {
     public void removeExpiredExternalTables(LambdaLogger logger) {
         try {
             var expiredTableNames = getExpiredExternalTableNames(logger);
-            logger.log(format("Found %d tables to remove", expiredTableNames.size()));
+            logger.log(format("Found %d tables to remove", expiredTableNames.size()), LogLevel.INFO);
 
-            removeExternalTables(expiredTableNames, logger);
-            logger.log(format("Removed %d tables:\n%s", expiredTableNames.size(), join("\n", expiredTableNames)));
+            if (expiredTableNames.size() > 0) {
+                removeExternalTables(expiredTableNames, logger);
+                logger.log(
+                        format("Removed %d tables:\n%s", expiredTableNames.size(), join("\n", expiredTableNames)),
+                        LogLevel.INFO
+                );
+            }
         } catch (Exception e) {
             logger.log(format("Failed to remove tables: %s", e.getMessage()), LogLevel.ERROR);
         }
     }
 
     private List<String> getExpiredExternalTableNames(LambdaLogger logger) throws InterruptedException {
-        logger.log("Getting expired table names");
+        logger.log("Getting expired table names", LogLevel.INFO);
 
         var request = ExecuteStatementRequest.builder()
             .clusterIdentifier(clusterId)
@@ -90,7 +95,7 @@ public class RedShiftTableExpiryService {
                 .map(tableName -> format(DROP_STATEMENT, tableName))
                 .collect(Collectors.joining("\n"));
 
-        logger.log(format("Dropping tables:\n%s", dropStatements));
+        logger.log(format("Dropping tables:\n%s", dropStatements), LogLevel.INFO);
 
         var statementRequest = ExecuteStatementRequest.builder()
                 .clusterIdentifier(clusterId)
@@ -109,7 +114,7 @@ public class RedShiftTableExpiryService {
         var describeResult = dataClient.describeStatement(describeRequest);
 
         while(!isFinished(describeResult)) {
-            logger.log(format("Query status: %s", describeResult.status()));
+            logger.log(format("Query status: %s", describeResult.status()), LogLevel.INFO);
             //noinspection BusyWait
             Thread.sleep(STATEMENT_STATUS_CHECK_DELAY_MILLIS);
 
@@ -119,7 +124,7 @@ public class RedShiftTableExpiryService {
         boolean success = describeResult.status().equals(StatusString.FINISHED);
 
         if (success) {
-            logger.log("Query completed successfully");
+            logger.log("Query completed successfully", LogLevel.INFO);
         } else {
             logger.log(format("Query failed with status: %s - %s", describeResult.status(), describeResult.error()), LogLevel.ERROR);
         }
