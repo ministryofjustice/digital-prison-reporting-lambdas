@@ -7,6 +7,7 @@ import software.amazon.awssdk.services.redshiftdata.model.*;
 
 import java.util.List;
 
+import static java.lang.Math.min;
 import static java.util.Collections.emptyList;
 import static java.util.stream.Collectors.toList;
 
@@ -18,6 +19,8 @@ public class RedShiftTableExpiryService {
             "FROM SVV_EXTERNAL_TABLES " +
             "WHERE schemaname = 'reports' " +
             "AND json_extract_path_text(parameters, 'transient_lastDdlTime', TRUE) < (EXTRACT(EPOCH FROM GETDATE()) - %d)";
+    private static final int MAX_BATCH_SIZE = 40;
+
     public static final int STATEMENT_STATUS_CHECK_DELAY_MILLIS = 1000;
 
 
@@ -84,11 +87,22 @@ public class RedShiftTableExpiryService {
                 .map(tableName -> String.format(DROP_STATEMENT, tableName))
                 .collect(toList());
 
+        int numberOfBatches = (dropStatements.size() + MAX_BATCH_SIZE - 1) / MAX_BATCH_SIZE;
+
+        for (int i = 0; i < numberOfBatches; i++) {
+            int batchStart = i * MAX_BATCH_SIZE;
+            int batchEnd = min(dropStatements.size(), (i + 1) * MAX_BATCH_SIZE);
+
+            removeExternalTableBatch(dropStatements.subList(batchStart, batchEnd));
+        }
+    }
+
+    private void removeExternalTableBatch(List<String> batch) throws InterruptedException {
         var statementRequest = BatchExecuteStatementRequest.builder()
                 .clusterIdentifier(clusterId)
                 .database(databaseName)
                 .secretArn(secretArn)
-                .sqls(dropStatements)
+                .sqls(batch)
                 .build();
 
         var response = dataClient.batchExecuteStatement(statementRequest);
