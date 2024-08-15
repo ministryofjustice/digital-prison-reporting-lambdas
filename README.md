@@ -10,7 +10,7 @@
 ## Overview
 
 Provides code defining a number of lambdas to be launched by AWS supporting a
-number of processes within the Digital Prison Reporting platform.
+number of processes within the Digital Prison Reporting platform. 
 
 ## Local Development
 
