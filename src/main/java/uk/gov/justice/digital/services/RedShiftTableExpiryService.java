@@ -20,7 +20,7 @@ public class RedShiftTableExpiryService {
             "SELECT tablename " +
             "FROM SVV_EXTERNAL_TABLES " +
             "WHERE schemaname = 'reports' " +
-            "AND COALESCE(json_extract_path_text(parameters, 'transient_lastDdlTime', TRUE), 0) < (EXTRACT(EPOCH FROM GETDATE()) - %d)";
+            "AND NULLIF(json_extract_path_text(parameters, 'transient_lastDdlTime', TRUE), '0')::bigint < (EXTRACT(EPOCH FROM GETDATE()) - %d)";
 
     public static final int STATEMENT_STATUS_CHECK_DELAY_MILLIS = 1000;
 
