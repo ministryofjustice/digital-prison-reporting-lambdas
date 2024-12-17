@@ -6,7 +6,7 @@ import software.amazon.awssdk.services.redshiftdata.RedshiftDataClient;
 import software.amazon.awssdk.services.redshiftdata.model.*;
 
 import java.util.List;
-import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static java.lang.String.format;
 import static java.lang.String.join;
@@ -21,7 +21,7 @@ public class RedShiftTableExpiryService {
             "FROM SVV_EXTERNAL_TABLES " +
             "WHERE schemaname = 'reports' " +
             "AND COALESCE(json_extract_path_text(parameters, 'transient_lastDdlTime', TRUE), '0')::bigint < (EXTRACT(EPOCH FROM GETDATE()) - %d)";
-
+    private static final int DROP_BATCH_SIZE = 500;
     public static final int STATEMENT_STATUS_CHECK_DELAY_MILLIS = 1000;
 
 
@@ -62,7 +62,7 @@ public class RedShiftTableExpiryService {
         }
     }
 
-    private List<String> getExpiredExternalTableNames(LambdaLogger logger) throws InterruptedException {
+    private List<String> getExpiredExternalTableNames(LambdaLogger logger) {
         logger.log("Getting expired table names", LogLevel.INFO);
 
         var request = ExecuteStatementRequest.builder()
@@ -90,33 +90,50 @@ public class RedShiftTableExpiryService {
         return emptyList();
     }
 
-    private void removeExternalTables(List<String> tableNames, LambdaLogger logger) throws InterruptedException {
-        String dropStatements = tableNames.stream()
+    private void removeExternalTables(List<String> tableNames, LambdaLogger logger) {
+        List<String> dropStatements =  tableNames.stream()
                 .map(tableName -> format(DROP_STATEMENT, tableName))
-                .collect(Collectors.joining("\n"));
+                        .collect(toList());
 
-        logger.log(format("Dropping tables:\n%s", dropStatements), LogLevel.INFO);
+        int totalToDrop = dropStatements.size();
+
+
+        IntStream.range(0, (totalToDrop + DROP_BATCH_SIZE-1) / DROP_BATCH_SIZE)
+                .mapToObj(batchNum -> dropStatements.subList(batchNum * DROP_BATCH_SIZE, Math.min(totalToDrop, (batchNum+1) * DROP_BATCH_SIZE)))
+                .parallel()
+                .forEach(batch -> removeExternalTableBatch(batch, logger));
+
+    }
+
+    private void removeExternalTableBatch(List<String> dropStatements, LambdaLogger logger) {
+        String singleStatement = String.join("\n", dropStatements);
+
+        logger.log(format("Dropping tables:\n%s", singleStatement), LogLevel.INFO);
 
         var statementRequest = ExecuteStatementRequest.builder()
                 .clusterIdentifier(clusterId)
                 .database(databaseName)
                 .secretArn(secretArn)
-                .sql(dropStatements)
+                .sql(singleStatement)
                 .build();
 
         var response = dataClient.executeStatement(statementRequest);
         requestCompletesSuccessfully(response.id(), logger);
     }
 
-    private boolean requestCompletesSuccessfully(String responseId, LambdaLogger logger) throws InterruptedException {
+    private boolean requestCompletesSuccessfully(String responseId, LambdaLogger logger) {
         var describeRequest = DescribeStatementRequest.builder().id(responseId).build();
 
         var describeResult = dataClient.describeStatement(describeRequest);
 
         while(!isFinished(describeResult)) {
             logger.log(format("Query status: %s", describeResult.status()), LogLevel.INFO);
-            //noinspection BusyWait
-            Thread.sleep(STATEMENT_STATUS_CHECK_DELAY_MILLIS);
+            try {
+                //noinspection BusyWait
+                Thread.sleep(STATEMENT_STATUS_CHECK_DELAY_MILLIS);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
 
             describeResult = dataClient.describeStatement(describeRequest);
         }
