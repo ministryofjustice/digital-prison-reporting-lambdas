@@ -11,6 +11,7 @@ import software.amazon.awssdk.services.redshiftdata.RedshiftDataClient;
 import software.amazon.awssdk.services.redshiftdata.model.*;
 
 import java.util.Collection;
+import java.util.Collections;
 
 import static java.util.Collections.singletonList;
 import static org.mockito.ArgumentMatchers.any;
@@ -67,5 +68,42 @@ class RedShiftTableExpiryServiceTest {
         verify(dataClient).getStatementResult((GetStatementResultRequest) any());
         verify(dataClient, times(2)).describeStatement(DescribeStatementRequest.builder().id(getTableId).build());
         verify(dataClient, times(2)).describeStatement(DescribeStatementRequest.builder().id(removeTableId).build());
+    }
+
+    @Test
+    public void removeExpiredExternalTables_largeQuantity_shouldBatchSuccessfully() {
+        String getTableId = "GET_TABLE_ID";
+        String removeTableId = "REMOVE_TABLE_ID";
+        String tableName = "TABLE_NAME";
+        Collection<Collection<Field>> records = Collections.nCopies(
+                501,
+                singletonList(Field.builder().stringValue(tableName).build())
+        );
+
+        doNothing().when(mockLambdaLogger).log(anyString(), eq(LogLevel.INFO));
+
+        // Get list of expired tables
+        when(dataClient.executeStatement((ExecuteStatementRequest) any()))
+                .thenReturn(ExecuteStatementResponse.builder().id(getTableId).build())
+                .thenReturn(ExecuteStatementResponse.builder().id(removeTableId).build());
+        when(dataClient.describeStatement(DescribeStatementRequest.builder().id(getTableId).build()))
+                .thenReturn(DescribeStatementResponse.builder().status(StatusString.STARTED).build())
+                .thenReturn(DescribeStatementResponse.builder().status(StatusString.FINISHED).build());
+        when(dataClient.getStatementResult((GetStatementResultRequest) any()))
+                .thenReturn(GetStatementResultResponse.builder().records(records).build());
+
+        // Remove tables
+        when(dataClient.describeStatement(DescribeStatementRequest.builder().id(removeTableId).build()))
+                .thenReturn(DescribeStatementResponse.builder().status(StatusString.STARTED).build())
+                .thenReturn(DescribeStatementResponse.builder().status(StatusString.FINISHED).build())
+                .thenReturn(DescribeStatementResponse.builder().status(StatusString.STARTED).build())
+                .thenReturn(DescribeStatementResponse.builder().status(StatusString.FINISHED).build());
+
+        undertest.removeExpiredExternalTables(mockLambdaLogger);
+
+        verify(dataClient, times(3)).executeStatement((ExecuteStatementRequest) any());
+        verify(dataClient).getStatementResult((GetStatementResultRequest) any());
+        verify(dataClient, times(2)).describeStatement(DescribeStatementRequest.builder().id(getTableId).build());
+        verify(dataClient, times(4)).describeStatement(DescribeStatementRequest.builder().id(removeTableId).build());
     }
 }
