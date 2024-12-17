@@ -12,7 +12,7 @@ workflows:
           context:
             - hmpps-reporting-common
             - hmpps-reporting-orb
-          cache_key: "dpr-lambdas-build-cache-v1"
+          cache_key: "dpr-lambdas-build-cache-v2"
       - reporting/gradle_build_publish:
           tag: "11.0"
           app: digital-prison-reporting-lambdas
