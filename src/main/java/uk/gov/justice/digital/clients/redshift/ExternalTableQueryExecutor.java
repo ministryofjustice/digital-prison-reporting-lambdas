@@ -6,8 +6,6 @@ import software.amazon.awssdk.services.redshiftdata.RedshiftDataClient;
 import software.amazon.awssdk.services.redshiftdata.model.*;
 import uk.gov.justice.digital.TableS3Location;
 import uk.gov.justice.digital.TableS3MetaData;
-
-import java.util.Collection;
 import java.util.List;
 import java.util.stream.IntStream;
 
@@ -39,14 +37,12 @@ public class ExternalTableQueryExecutor {
     private final String clusterId;
     private final String databaseName;
     private final String secretArn;
-    private final int expirySeconds;
 
-    public ExternalTableQueryExecutor(RedshiftDataClient dataClient, String clusterId, String databaseName, String secretArn, int expirySeconds) {
+    public ExternalTableQueryExecutor(RedshiftDataClient dataClient, String clusterId, String databaseName, String secretArn) {
         this.dataClient = dataClient;
         this.clusterId = clusterId;
         this.databaseName = databaseName;
         this.secretArn = secretArn;
-        this.expirySeconds = expirySeconds;
     }
 
     public List<ExecuteStatementResponse> removeExternalTables(List<String> tableNames, LambdaLogger logger) {
@@ -119,7 +115,7 @@ public class ExternalTableQueryExecutor {
         return success;
     }
 
-    public ExecuteStatementResponse startExpiredTablesQuery() {
+    public ExecuteStatementResponse startExpiredTablesQuery(int expirySeconds) {
         return startQuery(format(GET_EXPIRED_TABLES_STATEMENT, expirySeconds));
     }
 
@@ -129,7 +125,6 @@ public class ExternalTableQueryExecutor {
 
     private List<ExecuteStatementResponse> startQueries(LambdaLogger logger, List<String> statements, int batchSize) {
         int totalToDrop = statements.size();
-
 
         return IntStream.range(0, (totalToDrop + batchSize - 1) / batchSize)
                 .mapToObj(batchNum -> statements.subList(batchNum * batchSize, Math.min(totalToDrop, (batchNum + 1) * batchSize)))
@@ -169,7 +164,7 @@ public class ExternalTableQueryExecutor {
         }
     }
 
-    public Collection<ExecuteStatementResponse> updateTableCreationDates(List<TableS3MetaData> updateTables, LambdaLogger logger) {
+    public List<ExecuteStatementResponse> updateTableCreationDates(List<TableS3MetaData> updateTables, LambdaLogger logger) {
         var statements = updateTables.stream()
                 .map(t -> format(UPDATE_TABLE_WITH_CREATION_DATE_STATEMENT, t.createdEpochDate, t.tableName))
                 .collect(toList());

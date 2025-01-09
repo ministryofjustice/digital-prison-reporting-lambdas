@@ -17,8 +17,12 @@ public class S3Client {
 
     public Long getObjectCreatedDate(String location) {
         var uri = new AmazonS3URI(location);
-        var metadata = client.getObjectMetadata(uri.getBucket(), uri.getKey());
 
-        return metadata == null ? null : metadata.getLastModified().getTime();
+        if (client.doesObjectExist(uri.getBucket(), uri.getKey())) {
+            var metadata = client.getObjectMetadata(uri.getBucket(), uri.getKey());
+            return metadata.getLastModified().getTime();
+        }
+
+        return null;
     }
 }
