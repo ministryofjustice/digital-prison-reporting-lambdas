@@ -27,7 +27,8 @@ import static uk.gov.justice.digital.common.Utils.*;
  * <pre>
  *  {
  *     "token": "some-step-function-task-token",
- *     "replicationTaskArn": "DMS replication task ARN"
+ *     "replicationTaskArn": "DMS replication task ARN",
+ *     "tokenExpiryDays": "5"
  *  }
  * </pre>
  * <p>When received, the Lambda saves the token to dynamoDB using the replicationTaskArn value as key.
@@ -74,16 +75,22 @@ public class StepFunctionDMSNotificationLambda implements RequestHandler<Map<Str
 
         LambdaLogger logger = context.getLogger();
         // Optional task token. Present for a DMS start action and will be saved in DynamoDB.
-        // When absent, means the Lambda should stop the step-function using the saved token in Dynamo.
+        // When absent, means the Lambda should stop the step-function using the saved token in DynamoDB.
         final String inputToken = getOptionalString(event, TASK_TOKEN_KEY).orElse("");
         final String taskArn = getOptionalString(event, REPLICATION_TASK_ARN_KEY)
                 .orElseGet(() -> getCloudWatchEventTaskArn(event));
+        // Optional number of days after which the token should be considered to have expired and will be deleted via TTL.
+        // Only used for the start action when saving the token in DynamoDB.
+        // When absent, defaults to DEFAULT_TOKEN_EXPIRY_DAYS.
+        final Long tokenExpiryDays = getOptionalString(event, TOKEN_EXPIRY_DAYS_KEY)
+                .map(Long::parseLong)
+                .orElse(DEFAULT_TOKEN_EXPIRY_DAYS);
 
         if (inputToken.isEmpty()) {
             service.processStopEvent(logger, DYNAMO_DB_TABLE, REPLICATION_TASK_ARN_KEY, taskArn);
         } else {
             logger.log(String.format("Saving token %s to Dynamo table", inputToken), LogLevel.INFO);
-            service.registerTaskToken(inputToken, taskArn, DYNAMO_DB_TABLE);
+            service.registerTaskToken(inputToken, taskArn, DYNAMO_DB_TABLE, tokenExpiryDays);
         }
 
         logger.log("Done", LogLevel.INFO);

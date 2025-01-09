@@ -10,7 +10,7 @@ plugins {
 
 group 'uk.gov.justice'
 
-version "${version != 'unspecified' ? version : '0.0.1-SNAPSHOT'}"
+version "${version != 'unspecified' ? version : '0.0.13-SNAPSHOT'}"
 
 java {
     sourceCompatibility = JavaVersion.VERSION_11
@@ -31,6 +31,7 @@ ext {
     hamcrestVersion = '2.2'
     mockitoVersion = '5.2.0'
     amazonSdkVersion = '1.12.590'
+    amazonRedShiftSdkVersion = '2.26.22'
     lambdaCoreVersion = '1.2.3'
     lambdaJavaEventsVersion = '3.11.3'
     systemLambdaVersion = '1.2.1'
@@ -40,8 +41,10 @@ dependencies {
     implementation "com.amazonaws:aws-java-sdk-s3:$amazonSdkVersion"
     implementation "com.amazonaws:aws-java-sdk-dynamodb:$amazonSdkVersion"
     implementation "com.amazonaws:aws-java-sdk-stepfunctions:$amazonSdkVersion"
+    implementation "com.amazonaws:aws-java-sdk-glue:$amazonSdkVersion"
     implementation "com.amazonaws:aws-lambda-java-core:$lambdaCoreVersion"
     implementation "com.amazonaws:aws-lambda-java-events:$lambdaJavaEventsVersion"
+    implementation "software.amazon.awssdk:redshiftdata:$amazonRedShiftSdkVersion"
 
     testImplementation "com.github.stefanbirkner:system-lambda:$systemLambdaVersion"
     testImplementation "org.junit.jupiter:junit-jupiter-api:$junitVersion"

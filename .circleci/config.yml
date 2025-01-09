@@ -1,7 +1,7 @@
 version: 2.1
 
 orbs:
-  reporting: ministryofjustice/hmpps-reporting@1.0.37
+  reporting: ministryofjustice/hmpps-reporting@1.0.53
   slack: circleci/slack@4.12.5
 
 workflows:
@@ -12,16 +12,16 @@ workflows:
           context:
             - hmpps-reporting-common
             - hmpps-reporting-orb
-          cache_key: "owasp-build-cache"
+          cache_key: "dpr-lambdas-build-cache-v2"
       - reporting/gradle_build_publish:
           tag: "11.0"
           app: digital-prison-reporting-lambdas
           app_artifacts_directory: build/libs/
           bucket_prefix: dpr-artifact-store
           sync_args: "--exclude '*' --include '*-all*jar'"
-          deploy_script: true
           deploy_to_test: true # Deploy to Test Environment
-          deploy_to_preprod: true # Deploy to PreProd Environment
+          refresh_lambda: true
+          refresh_function: dpr-pipeline-notification-function
           notify_jira: true
           notify_slack: true
           channel: dpr_cicd_alerts
@@ -35,7 +35,7 @@ workflows:
           context:
             - hmpps-reporting-common
             - hmpps-reporting-orb
-          cache_key: "dpr-lambdas-build-cache"
+          cache_key: "dpr-lambdas-build-cache-v2"
 
   owasp-security:
     triggers:
@@ -52,4 +52,4 @@ workflows:
           context:
             - hmpps-reporting-common
             - hmpps-reporting-orb
-          cache_key: "owasp-build-cache"
+          cache_key: "dpr-lambdas-owasp-build-cache-v1"

@@ -25,6 +25,7 @@ class StepFunctionDMSNotificationServiceTest {
     private static final String TABLE = "dynamo-table";
     private static final String TOKEN = "token";
     private static final String TASK_ARN = "task-arn";
+    private static final Long TOKEN_EXPIRY_DAYS = 4L;
 
     @Mock
     DynamoDbClient mockDynamoDbClient;
@@ -47,7 +48,7 @@ class StepFunctionDMSNotificationServiceTest {
 
         undertest.processStopEvent(mockLambdaLogger, TABLE, "task-key", TASK_ARN);
 
-        verify(mockStepFunctionsClient, times(1)).notifyStepFunction(eq(TOKEN));
+        verify(mockStepFunctionsClient, times(1)).notifyStepFunctionSuccess(eq(TOKEN));
         verify(mockDynamoDbClient, times(1)).deleteToken(eq(TABLE), any());
     }
 
@@ -65,14 +66,14 @@ class StepFunctionDMSNotificationServiceTest {
     @Test
     public void registerTaskTokenShouldSaveToken() {
 
-        undertest.registerTaskToken(TOKEN, TASK_ARN, TABLE);
+        undertest.registerTaskToken(TOKEN, TASK_ARN, TABLE, TOKEN_EXPIRY_DAYS);
 
         verify(mockDynamoDbClient, times(1))
                 .saveToken(
                         eq(TABLE),
                         eq(TASK_ARN),
                         eq(TOKEN),
-                        eq(fixedDateTime.plusDays(1).toEpochSecond(ZoneOffset.UTC)),
+                        eq(fixedDateTime.plusDays(TOKEN_EXPIRY_DAYS).toEpochSecond(ZoneOffset.UTC)),
                         eq(fixedDateTime.format(DateTimeFormatter.ISO_DATE_TIME))
                 );
     }
