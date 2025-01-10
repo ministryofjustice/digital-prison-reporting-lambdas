@@ -7,12 +7,15 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import software.amazon.awssdk.services.redshiftdata.RedshiftDataClient;
 import software.amazon.awssdk.services.redshiftdata.model.*;
+import uk.gov.justice.digital.TableS3Location;
+import uk.gov.justice.digital.clients.redshift.ExternalTableQueryExecutor;
+import uk.gov.justice.digital.clients.s3.S3Client;
 
-import java.util.Collection;
+import java.time.Instant;
 import java.util.Collections;
 
+import static java.util.Collections.emptyList;
 import static java.util.Collections.singletonList;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -21,89 +24,169 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class RedShiftTableExpiryServiceTest {
 
-    private static final String CLUSTER_ID = "CLUSTER_ID";
-    private static final String DB_NAME = "DB_NAME";
-    private static final String SECRET_ARN = "SECRET_ARN";
-    private static final int TABLE_EXPIRY_SECONDS = 100;
+    private static final int TABLE_EXPIRY_SECONDS = 200;
 
     @Mock
-    RedshiftDataClient dataClient;
+    ExternalTableQueryExecutor queryExecutor;
+    @Mock
+    S3Client s3Client;
     @Mock
     LambdaLogger mockLambdaLogger;
 
-    private RedShiftTableExpiryService undertest;
+    private RedShiftTableExpiryService underTest;
 
     @BeforeEach
     public void setup() {
-        undertest = new RedShiftTableExpiryService(dataClient, CLUSTER_ID, DB_NAME, SECRET_ARN, TABLE_EXPIRY_SECONDS);
+        underTest = new RedShiftTableExpiryService(s3Client, queryExecutor, TABLE_EXPIRY_SECONDS);
     }
 
     @Test
     public void removeExpiredExternalTables_success_shouldCompleteSuccessfully() {
-        String getTableId = "GET_TABLE_ID";
+        String getExpiredTablesId = "GET_EXPIRED_TABLES_ID";
+        String getInvalidTablesId = "GET_INVALID_TABLES_ID";
         String removeTableId = "REMOVE_TABLE_ID";
-        String tableName = "TABLE_NAME";
-        Collection<Collection<Field>> records = singletonList(singletonList(Field.builder().stringValue(tableName).build()));
+        String expiredTableName = "TABLE_NAME";
 
         doNothing().when(mockLambdaLogger).log(anyString(), eq(LogLevel.INFO));
 
-        // Get list of expired tables
-        when(dataClient.executeStatement((ExecuteStatementRequest) any()))
-                .thenReturn(ExecuteStatementResponse.builder().id(getTableId).build())
-                .thenReturn(ExecuteStatementResponse.builder().id(removeTableId).build());
-        when(dataClient.describeStatement(DescribeStatementRequest.builder().id(getTableId).build()))
-                .thenReturn(DescribeStatementResponse.builder().status(StatusString.STARTED).build())
-                .thenReturn(DescribeStatementResponse.builder().status(StatusString.FINISHED).build());
-        when(dataClient.getStatementResult((GetStatementResultRequest) any()))
-                .thenReturn(GetStatementResultResponse.builder().records(records).build());
+        when(queryExecutor.startExpiredTablesQuery(anyInt()))
+                .thenReturn(ExecuteStatementResponse.builder().id(getExpiredTablesId).build());
+        when(queryExecutor.startInvalidTablesQuery())
+                .thenReturn(ExecuteStatementResponse.builder().id(getInvalidTablesId).build());
+        when(queryExecutor.getExpiredExternalTableNames(any(), any()))
+                .thenReturn(singletonList(expiredTableName));
+        when(queryExecutor.removeExternalTables(any(), any()))
+                .thenReturn(singletonList(ExecuteStatementResponse.builder().id(removeTableId).build()));
+        when(queryExecutor.getInvalidTables(any(), any()))
+                .thenReturn(emptyList());
 
-        // Remove tables
-        when(dataClient.describeStatement(DescribeStatementRequest.builder().id(removeTableId).build()))
-                .thenReturn(DescribeStatementResponse.builder().status(StatusString.STARTED).build())
-                .thenReturn(DescribeStatementResponse.builder().status(StatusString.FINISHED).build());
+        underTest.removeExpiredExternalTables(mockLambdaLogger);
 
-        undertest.removeExpiredExternalTables(mockLambdaLogger);
-
-        verify(dataClient, times(2)).executeStatement((ExecuteStatementRequest) any());
-        verify(dataClient).getStatementResult((GetStatementResultRequest) any());
-        verify(dataClient, times(2)).describeStatement(DescribeStatementRequest.builder().id(getTableId).build());
-        verify(dataClient, times(2)).describeStatement(DescribeStatementRequest.builder().id(removeTableId).build());
+        verify(queryExecutor).startExpiredTablesQuery(TABLE_EXPIRY_SECONDS);
+        verify(queryExecutor).startInvalidTablesQuery();
+        verify(queryExecutor).getExpiredExternalTableNames(ExecuteStatementResponse.builder().id(getExpiredTablesId).build(), mockLambdaLogger);
+        verify(queryExecutor).removeExternalTables(singletonList(expiredTableName), mockLambdaLogger);
+        verify(queryExecutor).getInvalidTables(ExecuteStatementResponse.builder().id(getInvalidTablesId).build(), mockLambdaLogger);
     }
 
     @Test
     public void removeExpiredExternalTables_largeQuantity_shouldBatchSuccessfully() {
-        String getTableId = "GET_TABLE_ID";
+        String getExpiredTablesId = "GET_EXPIRED_TABLES_ID";
+        String getInvalidTablesId = "GET_INVALID_TABLES_ID";
         String removeTableId = "REMOVE_TABLE_ID";
-        String tableName = "TABLE_NAME";
-        Collection<Collection<Field>> records = Collections.nCopies(
-                501,
-                singletonList(Field.builder().stringValue(tableName).build())
-        );
+        String expiredTableName = "TABLE_NAME";
 
         doNothing().when(mockLambdaLogger).log(anyString(), eq(LogLevel.INFO));
 
-        // Get list of expired tables
-        when(dataClient.executeStatement((ExecuteStatementRequest) any()))
-                .thenReturn(ExecuteStatementResponse.builder().id(getTableId).build())
-                .thenReturn(ExecuteStatementResponse.builder().id(removeTableId).build());
-        when(dataClient.describeStatement(DescribeStatementRequest.builder().id(getTableId).build()))
-                .thenReturn(DescribeStatementResponse.builder().status(StatusString.STARTED).build())
-                .thenReturn(DescribeStatementResponse.builder().status(StatusString.FINISHED).build());
-        when(dataClient.getStatementResult((GetStatementResultRequest) any()))
-                .thenReturn(GetStatementResultResponse.builder().records(records).build());
+        when(queryExecutor.startExpiredTablesQuery(anyInt()))
+                .thenReturn(ExecuteStatementResponse.builder().id(getExpiredTablesId).build());
+        when(queryExecutor.startInvalidTablesQuery())
+                .thenReturn(ExecuteStatementResponse.builder().id(getInvalidTablesId).build());
+        when(queryExecutor.getExpiredExternalTableNames(any(), any()))
+                .thenReturn(Collections.nCopies(501, expiredTableName));
+        when(queryExecutor.removeExternalTables(any(), any()))
+                .thenReturn(singletonList(ExecuteStatementResponse.builder().id(removeTableId).build()));
+        when(queryExecutor.getInvalidTables(any(), any()))
+                .thenReturn(emptyList());
 
-        // Remove tables
-        when(dataClient.describeStatement(DescribeStatementRequest.builder().id(removeTableId).build()))
-                .thenReturn(DescribeStatementResponse.builder().status(StatusString.STARTED).build())
-                .thenReturn(DescribeStatementResponse.builder().status(StatusString.FINISHED).build())
-                .thenReturn(DescribeStatementResponse.builder().status(StatusString.STARTED).build())
-                .thenReturn(DescribeStatementResponse.builder().status(StatusString.FINISHED).build());
+        underTest.removeExpiredExternalTables(mockLambdaLogger);
 
-        undertest.removeExpiredExternalTables(mockLambdaLogger);
+        verify(queryExecutor).startExpiredTablesQuery(TABLE_EXPIRY_SECONDS);
+        verify(queryExecutor).startInvalidTablesQuery();
+        verify(queryExecutor).getExpiredExternalTableNames(ExecuteStatementResponse.builder().id(getExpiredTablesId).build(), mockLambdaLogger);
+        verify(queryExecutor).removeExternalTables(Collections.nCopies(501, expiredTableName), mockLambdaLogger);
+        verify(queryExecutor).getInvalidTables(ExecuteStatementResponse.builder().id(getInvalidTablesId).build(), mockLambdaLogger);
+    }
 
-        verify(dataClient, times(3)).executeStatement((ExecuteStatementRequest) any());
-        verify(dataClient).getStatementResult((GetStatementResultRequest) any());
-        verify(dataClient, times(2)).describeStatement(DescribeStatementRequest.builder().id(getTableId).build());
-        verify(dataClient, times(4)).describeStatement(DescribeStatementRequest.builder().id(removeTableId).build());
+    @Test
+    public void removeExpiredExternalTables_invalidTablesWithNoData_shouldBeRemoved() {
+        String getExpiredTablesId = "GET_EXPIRED_TABLES_ID";
+        String getInvalidTablesId = "GET_INVALID_TABLES_ID";
+        String invalidTableName = "TABLE_NAME";
+        String invalidTableLocation = "TABLE_LOCATION";
+
+        doNothing().when(mockLambdaLogger).log(anyString(), eq(LogLevel.INFO));
+
+        when(queryExecutor.startExpiredTablesQuery(anyInt()))
+                .thenReturn(ExecuteStatementResponse.builder().id(getExpiredTablesId).build());
+        when(queryExecutor.startInvalidTablesQuery())
+                .thenReturn(ExecuteStatementResponse.builder().id(getInvalidTablesId).build());
+        when(queryExecutor.getExpiredExternalTableNames(any(), any()))
+                .thenReturn(emptyList());
+        when(queryExecutor.getInvalidTables(any(), any()))
+                .thenReturn(singletonList(new TableS3Location(invalidTableName, invalidTableLocation)));
+        when(s3Client.getObjectCreatedDate(any()))
+                .thenReturn(null);
+
+        underTest.removeExpiredExternalTables(mockLambdaLogger);
+
+        verify(queryExecutor).startExpiredTablesQuery(TABLE_EXPIRY_SECONDS);
+        verify(queryExecutor).startInvalidTablesQuery();
+        verify(queryExecutor).getExpiredExternalTableNames(ExecuteStatementResponse.builder().id(getExpiredTablesId).build(), mockLambdaLogger);
+        verify(queryExecutor).getInvalidTables(ExecuteStatementResponse.builder().id(getInvalidTablesId).build(), mockLambdaLogger);
+        verify(queryExecutor).removeExternalTables(singletonList(invalidTableName), mockLambdaLogger);
+        verify(s3Client).getObjectCreatedDate(invalidTableLocation);
+    }
+
+    @Test
+    public void removeExpiredExternalTables_invalidTablesWithExpiredCreationDate_shouldBeRemoved() {
+        String getExpiredTablesId = "GET_EXPIRED_TABLES_ID";
+        String getInvalidTablesId = "GET_INVALID_TABLES_ID";
+        String invalidTableName = "TABLE_NAME";
+        String invalidTableLocation = "TABLE_LOCATION";
+        long created = Instant.now().toEpochMilli() - (TABLE_EXPIRY_SECONDS + 1);
+
+        doNothing().when(mockLambdaLogger).log(anyString(), eq(LogLevel.INFO));
+
+        when(queryExecutor.startExpiredTablesQuery(anyInt()))
+                .thenReturn(ExecuteStatementResponse.builder().id(getExpiredTablesId).build());
+        when(queryExecutor.startInvalidTablesQuery())
+                .thenReturn(ExecuteStatementResponse.builder().id(getInvalidTablesId).build());
+        when(queryExecutor.getExpiredExternalTableNames(any(), any()))
+                .thenReturn(emptyList());
+        when(queryExecutor.getInvalidTables(any(), any()))
+                .thenReturn(singletonList(new TableS3Location(invalidTableName, invalidTableLocation)));
+        when(s3Client.getObjectCreatedDate(any()))
+                .thenReturn(created);
+
+        underTest.removeExpiredExternalTables(mockLambdaLogger);
+
+        verify(queryExecutor).startExpiredTablesQuery(TABLE_EXPIRY_SECONDS);
+        verify(queryExecutor).startInvalidTablesQuery();
+        verify(queryExecutor).getExpiredExternalTableNames(ExecuteStatementResponse.builder().id(getExpiredTablesId).build(), mockLambdaLogger);
+        verify(queryExecutor).getInvalidTables(ExecuteStatementResponse.builder().id(getInvalidTablesId).build(), mockLambdaLogger);
+        verify(queryExecutor).removeExternalTables(singletonList(invalidTableName), mockLambdaLogger);
+        verify(s3Client).getObjectCreatedDate(invalidTableLocation);
+    }
+
+    @Test
+    public void removeExpiredExternalTables_invalidTablesWithValidCreationDate_areNotDeleted() {
+        String getExpiredTablesId = "GET_EXPIRED_TABLES_ID";
+        String getInvalidTablesId = "GET_INVALID_TABLES_ID";
+        String invalidTableName = "TABLE_NAME";
+        String invalidTableLocation = "TABLE_LOCATION";
+        long created = Instant.now().toEpochMilli();
+
+        doNothing().when(mockLambdaLogger).log(anyString(), eq(LogLevel.INFO));
+
+        when(queryExecutor.startExpiredTablesQuery(anyInt()))
+                .thenReturn(ExecuteStatementResponse.builder().id(getExpiredTablesId).build());
+        when(queryExecutor.startInvalidTablesQuery())
+                .thenReturn(ExecuteStatementResponse.builder().id(getInvalidTablesId).build());
+        when(queryExecutor.getExpiredExternalTableNames(any(), any()))
+                .thenReturn(emptyList());
+        when(queryExecutor.getInvalidTables(any(), any()))
+                .thenReturn(singletonList(new TableS3Location(invalidTableName, invalidTableLocation)));
+        when(s3Client.getObjectCreatedDate(any()))
+                .thenReturn(created);
+
+        underTest.removeExpiredExternalTables(mockLambdaLogger);
+
+        verify(queryExecutor).startExpiredTablesQuery(TABLE_EXPIRY_SECONDS);
+        verify(queryExecutor).startInvalidTablesQuery();
+        verify(queryExecutor).getExpiredExternalTableNames(ExecuteStatementResponse.builder().id(getExpiredTablesId).build(), mockLambdaLogger);
+        verify(queryExecutor).getInvalidTables(ExecuteStatementResponse.builder().id(getInvalidTablesId).build(), mockLambdaLogger);
+        verify(queryExecutor, times(0)).removeExternalTables(any(), any());
+        verify(s3Client).getObjectCreatedDate(invalidTableLocation);
     }
 }
