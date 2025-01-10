@@ -63,7 +63,7 @@ public class RedShiftTableExpiryService {
 
     private Collection<ExecuteStatementResponse> processInvalidTables(ExecuteStatementResponse invalidTablesResponse, LambdaLogger logger) {
         var invalidTables = queryExecutor.getInvalidTables(invalidTablesResponse, logger).stream()
-                        .map(t -> new TableS3MetaData(t.tableName, t.s3Location, s3Client.getObjectCreatedDate(t.s3Location)))
+                        .map(t -> new TableS3MetaData(t.tableName, t.s3Location, s3Client.getEarliestObjectCreatedDate(t.s3Location)))
                                 .collect(toList());
 
         List<ExecuteStatementResponse> responses = new ArrayList<>();
