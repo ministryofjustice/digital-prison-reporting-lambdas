@@ -48,7 +48,7 @@ public class RedShiftTableExpiryService {
             if (!expiredTableNames.isEmpty()) {
                 finalResponses.addAll(queryExecutor.removeExternalTables(expiredTableNames, logger));
                 logger.log(
-                        format("Removed %d tables:\n%s", expiredTableNames.size(), join("\n", expiredTableNames)),
+                        format("Removed %d expired tables:\n%s", expiredTableNames.size(), join("\n", expiredTableNames)),
                         LogLevel.INFO
                 );
             }
@@ -63,7 +63,7 @@ public class RedShiftTableExpiryService {
 
     private Collection<ExecuteStatementResponse> processInvalidTables(ExecuteStatementResponse invalidTablesResponse, LambdaLogger logger) {
         var invalidTables = queryExecutor.getInvalidTables(invalidTablesResponse, logger).stream()
-                        .map(t -> new TableS3MetaData(t.tableName, t.s3Location, s3Client.getObjectCreatedDate(t.s3Location)))
+                        .map(t -> new TableS3MetaData(t.tableName, t.s3Location, s3Client.getEarliestObjectCreatedDate(t.s3Location)))
                                 .collect(toList());
 
         List<ExecuteStatementResponse> responses = new ArrayList<>();
@@ -74,7 +74,19 @@ public class RedShiftTableExpiryService {
                 .map(t -> t.tableName).collect(toList());
         if (!removeTables.isEmpty()) {
             responses.addAll(queryExecutor.removeExternalTables(removeTables, logger));
+
+            logger.log(
+                    format("Removed %d invalid tables:\n%s", removeTables.size(), join("\n", removeTables)),
+                    LogLevel.INFO
+            );
         }
+
+        logger.log(
+                format(
+                        "Ignored %d invalid tables that are still within expiry time.",
+                        invalidTables.size() - removeTables.size()),
+                LogLevel.INFO
+        );
 
         return responses;
     }
