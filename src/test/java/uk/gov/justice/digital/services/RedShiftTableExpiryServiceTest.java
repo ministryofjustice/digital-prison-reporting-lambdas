@@ -25,7 +25,7 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class RedShiftTableExpiryServiceTest {
 
-    private static final int TABLE_EXPIRY_SECONDS = 100;
+    private static final int TABLE_EXPIRY_SECONDS = 200;
 
     @Mock
     ExternalTableQueryExecutor queryExecutor;
