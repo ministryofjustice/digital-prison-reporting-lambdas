@@ -4,6 +4,11 @@ orbs:
   reporting: ministryofjustice/hmpps-reporting@1.0.53
   slack: circleci/slack@4.12.5
 
+parameters:
+  workingdir:
+    type: string
+    default: '.'
+
 jobs:
   validate:
     executor:
