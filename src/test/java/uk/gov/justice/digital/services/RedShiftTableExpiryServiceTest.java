@@ -9,7 +9,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import software.amazon.awssdk.services.redshiftdata.model.*;
 import uk.gov.justice.digital.TableS3Location;
-import uk.gov.justice.digital.TableS3MetaData;
 import uk.gov.justice.digital.clients.redshift.ExternalTableQueryExecutor;
 import uk.gov.justice.digital.clients.s3.S3Client;
 
@@ -68,7 +67,6 @@ class RedShiftTableExpiryServiceTest {
         verify(queryExecutor).getExpiredExternalTableNames(ExecuteStatementResponse.builder().id(getExpiredTablesId).build(), mockLambdaLogger);
         verify(queryExecutor).removeExternalTables(singletonList(expiredTableName), mockLambdaLogger);
         verify(queryExecutor).getInvalidTables(ExecuteStatementResponse.builder().id(getInvalidTablesId).build(), mockLambdaLogger);
-        verify(queryExecutor, times(0)).updateTableCreationDates(singletonList(any()), any());
     }
 
     @Test
@@ -98,7 +96,6 @@ class RedShiftTableExpiryServiceTest {
         verify(queryExecutor).getExpiredExternalTableNames(ExecuteStatementResponse.builder().id(getExpiredTablesId).build(), mockLambdaLogger);
         verify(queryExecutor).removeExternalTables(Collections.nCopies(501, expiredTableName), mockLambdaLogger);
         verify(queryExecutor).getInvalidTables(ExecuteStatementResponse.builder().id(getInvalidTablesId).build(), mockLambdaLogger);
-        verify(queryExecutor, times(0)).updateTableCreationDates(singletonList(any()), any());
     }
 
     @Test
@@ -128,7 +125,6 @@ class RedShiftTableExpiryServiceTest {
         verify(queryExecutor).getExpiredExternalTableNames(ExecuteStatementResponse.builder().id(getExpiredTablesId).build(), mockLambdaLogger);
         verify(queryExecutor).getInvalidTables(ExecuteStatementResponse.builder().id(getInvalidTablesId).build(), mockLambdaLogger);
         verify(queryExecutor).removeExternalTables(singletonList(invalidTableName), mockLambdaLogger);
-        verify(queryExecutor, times(0)).updateTableCreationDates(singletonList(any()), any());
         verify(s3Client).getObjectCreatedDate(invalidTableLocation);
     }
 
@@ -160,12 +156,11 @@ class RedShiftTableExpiryServiceTest {
         verify(queryExecutor).getExpiredExternalTableNames(ExecuteStatementResponse.builder().id(getExpiredTablesId).build(), mockLambdaLogger);
         verify(queryExecutor).getInvalidTables(ExecuteStatementResponse.builder().id(getInvalidTablesId).build(), mockLambdaLogger);
         verify(queryExecutor).removeExternalTables(singletonList(invalidTableName), mockLambdaLogger);
-        verify(queryExecutor, times(0)).updateTableCreationDates(singletonList(any()), any());
         verify(s3Client).getObjectCreatedDate(invalidTableLocation);
     }
 
     @Test
-    public void removeExpiredExternalTables_invalidTablesWithValidCreationDate_shouldBeUpdated() {
+    public void removeExpiredExternalTables_invalidTablesWithValidCreationDate_areNotDeleted() {
         String getExpiredTablesId = "GET_EXPIRED_TABLES_ID";
         String getInvalidTablesId = "GET_INVALID_TABLES_ID";
         String invalidTableName = "TABLE_NAME";
@@ -192,7 +187,6 @@ class RedShiftTableExpiryServiceTest {
         verify(queryExecutor).getExpiredExternalTableNames(ExecuteStatementResponse.builder().id(getExpiredTablesId).build(), mockLambdaLogger);
         verify(queryExecutor).getInvalidTables(ExecuteStatementResponse.builder().id(getInvalidTablesId).build(), mockLambdaLogger);
         verify(queryExecutor, times(0)).removeExternalTables(any(), any());
-        verify(queryExecutor).updateTableCreationDates(singletonList(new TableS3MetaData(invalidTableName, invalidTableLocation, created)), mockLambdaLogger);
         verify(s3Client).getObjectCreatedDate(invalidTableLocation);
     }
 }

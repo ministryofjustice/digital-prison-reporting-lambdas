@@ -76,14 +76,6 @@ public class RedShiftTableExpiryService {
             responses.addAll(queryExecutor.removeExternalTables(removeTables, logger));
         }
 
-        var updateTables = invalidTables.stream()
-                .filter(t -> t.createdEpochDate != null
-                        && (t.createdEpochDate + expirySeconds) > Instant.now().toEpochMilli())
-                .collect(toList());
-        if (!updateTables.isEmpty()) {
-            responses.addAll(queryExecutor.updateTableCreationDates(updateTables, logger));
-        }
-
         return responses;
     }
 }

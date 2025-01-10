@@ -5,7 +5,7 @@ import com.amazonaws.services.lambda.runtime.logging.LogLevel;
 import software.amazon.awssdk.services.redshiftdata.RedshiftDataClient;
 import software.amazon.awssdk.services.redshiftdata.model.*;
 import uk.gov.justice.digital.TableS3Location;
-import uk.gov.justice.digital.TableS3MetaData;
+
 import java.util.List;
 import java.util.stream.IntStream;
 
@@ -25,12 +25,8 @@ public class ExternalTableQueryExecutor {
                     "FROM SVV_EXTERNAL_TABLES " +
                     "WHERE schemaname = 'reports' " +
                     "AND json_extract_path_text(parameters, 'transient_lastDdlTime', TRUE) IS NULL";
-    private static final String UPDATE_TABLE_WITH_CREATION_DATE_STATEMENT =
-            "UPDATE SVV_EXTERNAL_TABLES " +
-                    "SET parameters = '{ \"transient_lastDdlTime\": %d }' " +
-                    "WHERE schemaname = 'reports' AND tablename = '%s';";
-    private static final int DROP_BATCH_SIZE = 500;
-    private static final int UPDATE_BATCH_SIZE = 100;
+
+    private static final int BATCH_SIZE = 500;
     public static final int STATEMENT_STATUS_CHECK_DELAY_MILLIS = 1000;
 
     private final RedshiftDataClient dataClient;
@@ -50,7 +46,7 @@ public class ExternalTableQueryExecutor {
                 .map(tableName -> format(DROP_STATEMENT, tableName))
                 .collect(toList());
 
-        return startQueries(logger, dropStatements, DROP_BATCH_SIZE);
+        return startQueries(logger, dropStatements);
     }
 
     public List<TableS3Location> getInvalidTables(ExecuteStatementResponse invalidTablesResponse, LambdaLogger logger) {
@@ -123,11 +119,11 @@ public class ExternalTableQueryExecutor {
         return startQuery(GET_INVALID_TABLES_STATEMENT);
     }
 
-    private List<ExecuteStatementResponse> startQueries(LambdaLogger logger, List<String> statements, int batchSize) {
+    private List<ExecuteStatementResponse> startQueries(LambdaLogger logger, List<String> statements) {
         int totalToDrop = statements.size();
 
-        return IntStream.range(0, (totalToDrop + batchSize - 1) / batchSize)
-                .mapToObj(batchNum -> statements.subList(batchNum * batchSize, Math.min(totalToDrop, (batchNum + 1) * batchSize)))
+        return IntStream.range(0, (totalToDrop + ExternalTableQueryExecutor.BATCH_SIZE - 1) / ExternalTableQueryExecutor.BATCH_SIZE)
+                .mapToObj(batchNum -> statements.subList(batchNum * ExternalTableQueryExecutor.BATCH_SIZE, Math.min(totalToDrop, (batchNum + 1) * ExternalTableQueryExecutor.BATCH_SIZE)))
                 .parallel()
                 .map(batch -> startQueryBatch(batch, logger))
                 .collect(toList());
@@ -162,12 +158,5 @@ public class ExternalTableQueryExecutor {
             default:
                 return false;
         }
-    }
-
-    public List<ExecuteStatementResponse> updateTableCreationDates(List<TableS3MetaData> updateTables, LambdaLogger logger) {
-        var statements = updateTables.stream()
-                .map(t -> format(UPDATE_TABLE_WITH_CREATION_DATE_STATEMENT, t.createdEpochDate, t.tableName))
-                .collect(toList());
-        return startQueries(logger, statements, UPDATE_BATCH_SIZE);
     }
 }

@@ -8,9 +8,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import software.amazon.awssdk.services.redshiftdata.RedshiftDataClient;
 import software.amazon.awssdk.services.redshiftdata.model.*;
-import uk.gov.justice.digital.TableS3MetaData;
-
-import java.time.Instant;
 
 import static java.util.Arrays.asList;
 import static java.util.Collections.singletonList;
@@ -162,22 +159,5 @@ class ExternalTableQueryExecutorTest {
         var actualResponse = target.startInvalidTablesQuery();
 
         assertEquals(actualResponse, response);
-    }
-
-    @Test
-    void updateTableCreationDates() {
-        String responseId = "RESPONSE_ID";
-        String tableName = "TABLE_NAME";
-        String tableLocation = "TABLE_LOCATION";
-        Long created = Instant.now().toEpochMilli();
-        var response = ExecuteStatementResponse.builder().id(responseId).build();
-        var updateTables = singletonList(new TableS3MetaData(tableName, tableLocation, created));
-        when(dataClient.executeStatement((ExecuteStatementRequest) any()))
-                .thenReturn(response);
-
-        var actualResponses = target.updateTableCreationDates(updateTables, mockLambdaLogger);
-
-        assertEquals(actualResponses.size(), 1);
-        assertEquals(actualResponses.get(0), response);
     }
 }
