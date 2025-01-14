@@ -70,7 +70,7 @@ public class RedShiftTableExpiryService {
 
         var removeTables = invalidTables.stream()
                 .filter(t -> t.createdEpochDate == null
-                        || (t.createdEpochDate + expirySeconds) <= Instant.now().toEpochMilli())
+                        || (t.createdEpochDate + (expirySeconds * 1000L)) <= Instant.now().toEpochMilli())
                 .map(t -> t.tableName).collect(toList());
         if (!removeTables.isEmpty()) {
             responses.addAll(queryExecutor.removeExternalTables(removeTables, logger));

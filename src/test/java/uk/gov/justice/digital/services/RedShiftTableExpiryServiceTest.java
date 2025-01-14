@@ -24,7 +24,7 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class RedShiftTableExpiryServiceTest {
 
-    private static final int TABLE_EXPIRY_SECONDS = 200;
+    private static final int TABLE_EXPIRY_SECONDS = 10000;
 
     @Mock
     ExternalTableQueryExecutor queryExecutor;
@@ -134,7 +134,7 @@ class RedShiftTableExpiryServiceTest {
         String getInvalidTablesId = "GET_INVALID_TABLES_ID";
         String invalidTableName = "TABLE_NAME";
         String invalidTableLocation = "TABLE_LOCATION";
-        long created = Instant.now().toEpochMilli() - (TABLE_EXPIRY_SECONDS + 1);
+        long created = Instant.now().toEpochMilli() - ((TABLE_EXPIRY_SECONDS + 1) * 1000);
 
         doNothing().when(mockLambdaLogger).log(anyString(), eq(LogLevel.INFO));
 
@@ -165,7 +165,7 @@ class RedShiftTableExpiryServiceTest {
         String getInvalidTablesId = "GET_INVALID_TABLES_ID";
         String invalidTableName = "TABLE_NAME";
         String invalidTableLocation = "TABLE_LOCATION";
-        long created = Instant.now().toEpochMilli();
+        long created = Instant.now().minusSeconds(TABLE_EXPIRY_SECONDS - 200).toEpochMilli();
 
         doNothing().when(mockLambdaLogger).log(anyString(), eq(LogLevel.INFO));
 
