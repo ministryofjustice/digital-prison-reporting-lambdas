@@ -134,7 +134,7 @@ class RedShiftTableExpiryServiceTest {
         String getInvalidTablesId = "GET_INVALID_TABLES_ID";
         String invalidTableName = "TABLE_NAME";
         String invalidTableLocation = "TABLE_LOCATION";
-        long created = Instant.now().toEpochMilli() - (TABLE_EXPIRY_SECONDS + 1);
+        long created = Instant.now().toEpochMilli() - ((TABLE_EXPIRY_SECONDS + 1) * 1000);
 
         doNothing().when(mockLambdaLogger).log(anyString(), eq(LogLevel.INFO));
 
