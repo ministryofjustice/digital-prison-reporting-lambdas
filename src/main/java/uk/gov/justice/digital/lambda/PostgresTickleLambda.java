@@ -9,7 +9,13 @@ import uk.gov.justice.digital.clients.secretsmanager.AWSSecretsManagerProvider;
 import uk.gov.justice.digital.clients.secretsmanager.SecretsManagerClient;
 import uk.gov.justice.digital.services.postgrestickle.PostgresTickleService;
 
-public class PostgresTickleLambda implements RequestHandler<Void, Void> {
+import java.util.Map;
+
+import static uk.gov.justice.digital.common.Utils.SECRET_ID_KEY;
+import static uk.gov.justice.digital.common.Utils.getOptionalString;
+import static uk.gov.justice.digital.common.Utils.getOrThrow;
+
+public class PostgresTickleLambda implements RequestHandler<Map<String, Object>, Void> {
 
     private final PostgresTickleService postgresTickleService;
 
@@ -19,10 +25,10 @@ public class PostgresTickleLambda implements RequestHandler<Void, Void> {
     }
 
     @Override
-    public Void handleRequest(Void input, Context context) {
+    public Void handleRequest(Map<String, Object> input, Context context) {
         LambdaLogger logger = context.getLogger();
         logger.log("Starting postgres tickle lambda handler", LogLevel.DEBUG);
-        String heartbeatEndpointSecretId = System.getenv("HEARTBEAT_ENDPOINT_SECRET_ID");
+        String heartbeatEndpointSecretId = getOrThrow(input, SECRET_ID_KEY, String.class);
         postgresTickleService.tickle(logger, heartbeatEndpointSecretId);
         logger.log("Finished postgres tickle lambda handler", LogLevel.DEBUG);
         return null;

@@ -12,6 +12,7 @@ public class Utils {
     public final static String TOKEN_EXPIRY_DAYS_KEY = "tokenExpiryDays";
     public final static long DEFAULT_TOKEN_EXPIRY_DAYS = 7;
     public final static String REPLICATION_TASK_ARN_KEY = "replicationTaskArn";
+    public final static String SECRET_ID_KEY = "secretId";
 
     public static Optional<String> getOptionalString(Map<String, Object> event, String key) {
         return Optional.ofNullable(event.get(key)).map(obj -> (String) obj);
