@@ -20,7 +20,7 @@ public class PostgresTickleService {
 
     public void tickle(LambdaLogger logger, String secretId) {
         logger.log("Retrieving endpoint details secret " + secretId, LogLevel.DEBUG);
-        JdbcEndpointDetails endpointDetails = secretsManagerClient.getSecret(secretId, JdbcEndpointDetails.class);
+        HeartBeatEndpointDetails endpointDetails = secretsManagerClient.getSecret(secretId, HeartBeatEndpointDetails.class);
         JdbcClient jdbcClient = postgresJdbcClientProvider.buildJdbcClient(endpointDetails);
         logger.log("Executing heartbeat query " + HEARTBEAT_QUERY, LogLevel.DEBUG);
         jdbcClient.executeQueryAndCloseConnection(HEARTBEAT_QUERY);

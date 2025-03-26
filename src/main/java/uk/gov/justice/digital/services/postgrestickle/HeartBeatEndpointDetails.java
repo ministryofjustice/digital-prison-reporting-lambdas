@@ -6,7 +6,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.Objects;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class JdbcEndpointDetails {
+public class HeartBeatEndpointDetails {
     private String username;
     private String password;
     @JsonProperty("heartbeat_endpoint")
@@ -15,7 +15,7 @@ public class JdbcEndpointDetails {
     private String dbName;
     private int port;
 
-    public JdbcEndpointDetails(String username, String password, String heartBeatEndpoint, String dbName, int port) {
+    public HeartBeatEndpointDetails(String username, String password, String heartBeatEndpoint, String dbName, int port) {
         this.username = username;
         this.password = password;
         this.heartBeatEndpoint = heartBeatEndpoint;
@@ -23,7 +23,7 @@ public class JdbcEndpointDetails {
         this.port = port;
     }
 
-    public JdbcEndpointDetails() {
+    public HeartBeatEndpointDetails() {
     }
 
     public String getUsername() {
@@ -69,7 +69,7 @@ public class JdbcEndpointDetails {
     @Override
     public boolean equals(Object o) {
         if (o == null || getClass() != o.getClass()) return false;
-        JdbcEndpointDetails that = (JdbcEndpointDetails) o;
+        HeartBeatEndpointDetails that = (HeartBeatEndpointDetails) o;
         return port == that.port && Objects.equals(username, that.username) && Objects.equals(password, that.password) && Objects.equals(heartBeatEndpoint, that.heartBeatEndpoint) && Objects.equals(dbName, that.dbName);
     }
 

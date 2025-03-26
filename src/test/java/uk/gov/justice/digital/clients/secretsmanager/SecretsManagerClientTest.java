@@ -7,7 +7,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import uk.gov.justice.digital.services.postgrestickle.JdbcEndpointDetails;
+import uk.gov.justice.digital.services.postgrestickle.HeartBeatEndpointDetails;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -40,8 +40,8 @@ class SecretsManagerClientTest {
         when(internalAwsClient.getSecretValue(any())).thenReturn(getSecretValueResult);
         when(getSecretValueResult.getSecretString()).thenReturn(SECRET_JSON_CONTENTS);
 
-        JdbcEndpointDetails result = underTest.getSecret("mysecret", JdbcEndpointDetails.class);
-        JdbcEndpointDetails expected = new JdbcEndpointDetails("some_user", "123", "somedb.abc.eu-west-2.rds.amazonaws.com", "postgres", 5432);
+        HeartBeatEndpointDetails result = underTest.getSecret("mysecret", HeartBeatEndpointDetails.class);
+        HeartBeatEndpointDetails expected = new HeartBeatEndpointDetails("some_user", "123", "somedb.abc.eu-west-2.rds.amazonaws.com", "postgres", 5432);
         assertEquals(expected, result);
     }
 
@@ -50,8 +50,8 @@ class SecretsManagerClientTest {
         when(internalAwsClient.getSecretValue(any())).thenReturn(getSecretValueResult);
         when(getSecretValueResult.getSecretString()).thenReturn(SECRET_JSON_CONTENTS_WITH_EXTRA_FIELD);
 
-        JdbcEndpointDetails result = underTest.getSecret("mysecret", JdbcEndpointDetails.class);
-        JdbcEndpointDetails expected = new JdbcEndpointDetails("some_user", "123", "somedb.abc.eu-west-2.rds.amazonaws.com", "postgres", 5432);
+        HeartBeatEndpointDetails result = underTest.getSecret("mysecret", HeartBeatEndpointDetails.class);
+        HeartBeatEndpointDetails expected = new HeartBeatEndpointDetails("some_user", "123", "somedb.abc.eu-west-2.rds.amazonaws.com", "postgres", 5432);
         assertEquals(expected, result);
     }
 
@@ -60,6 +60,6 @@ class SecretsManagerClientTest {
         when(internalAwsClient.getSecretValue(any())).thenReturn(getSecretValueResult);
         when(getSecretValueResult.getSecretString()).thenReturn("{");
 
-        assertThrows(RuntimeException.class, () -> underTest.getSecret("mysecret", JdbcEndpointDetails.class));
+        assertThrows(RuntimeException.class, () -> underTest.getSecret("mysecret", HeartBeatEndpointDetails.class));
     }
 }

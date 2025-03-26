@@ -7,12 +7,12 @@ import org.junit.jupiter.params.provider.CsvSource;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
-class JdbcEndpointDetailsTest {
-    private static final JdbcEndpointDetails ENDPOINT_DETAILS = new JdbcEndpointDetails("match", "match", "match", "match", 5432);
+class HeartBeatEndpointDetailsTest {
+    private static final HeartBeatEndpointDetails ENDPOINT_DETAILS = new HeartBeatEndpointDetails("match", "match", "match", "match", 5432);
 
     @Test
     void equalsShouldBeTrueWhenAllFieldsMatch() {
-        JdbcEndpointDetails underTest = new JdbcEndpointDetails("match", "match", "match", "match", 5432);
+        HeartBeatEndpointDetails underTest = new HeartBeatEndpointDetails("match", "match", "match", "match", 5432);
         assertEquals(ENDPOINT_DETAILS, underTest);
     }
 
@@ -25,13 +25,13 @@ class JdbcEndpointDetailsTest {
             "mismatch,match,match,match,5432",
     })
     void equalsShouldBeFalseForMismatch(String username, String password, String endpoint, String dbname, int port) {
-        JdbcEndpointDetails underTest = new JdbcEndpointDetails(username, password, endpoint, dbname, port);
+        HeartBeatEndpointDetails underTest = new HeartBeatEndpointDetails(username, password, endpoint, dbname, port);
         assertNotEquals(ENDPOINT_DETAILS, underTest);
     }
 
     @Test
     void hashCodeShouldBeEqualWhenAllFieldsMatch() {
-        JdbcEndpointDetails underTest = new JdbcEndpointDetails("match", "match", "match", "match", 5432);
+        HeartBeatEndpointDetails underTest = new HeartBeatEndpointDetails("match", "match", "match", "match", 5432);
         assertEquals(ENDPOINT_DETAILS.hashCode(), underTest.hashCode());
     }
 
@@ -44,7 +44,19 @@ class JdbcEndpointDetailsTest {
             "mismatch,match,match,match,5432",
     })
     void hashCodeShouldBeDifferentForMismatch(String username, String password, String endpoint, String dbname, int port) {
-        JdbcEndpointDetails underTest = new JdbcEndpointDetails(username, password, endpoint, dbname, port);
+        HeartBeatEndpointDetails underTest = new HeartBeatEndpointDetails(username, password, endpoint, dbname, port);
         assertNotEquals(ENDPOINT_DETAILS.hashCode(), underTest.hashCode());
     }
+
+    @Test
+    void gettersAndSettersShouldWork() {
+        HeartBeatEndpointDetails underTest = new HeartBeatEndpointDetails("user", "pass", "endpoint", "db", 5432);
+        assertEquals("user", underTest.getUsername());
+        assertEquals("pass", underTest.getPassword());
+        assertEquals("endpoint", underTest.getHeartBeatEndpoint());
+        assertEquals("db", underTest.getDbName());
+        assertEquals(5432, underTest.getPort());
+    }
+
+
 }

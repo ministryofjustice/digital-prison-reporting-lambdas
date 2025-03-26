@@ -18,7 +18,7 @@ import static org.mockito.Mockito.when;
 class PostgresTickleServiceTest {
 
     private static final String SECRET_ID = "my-secret-id";
-    private static final JdbcEndpointDetails ENDPOINT_DETAILS = new JdbcEndpointDetails("user", "password", "endpoint", "dbname", 5432);
+    private static final HeartBeatEndpointDetails ENDPOINT_DETAILS = new HeartBeatEndpointDetails("user", "password", "endpoint", "dbname", 5432);
 
     @Mock
     private SecretsManagerClient secretsManagerClient;
@@ -38,17 +38,17 @@ class PostgresTickleServiceTest {
 
     @Test
     void tickleShouldGetTheSecret() {
-        when(secretsManagerClient.getSecret(SECRET_ID, JdbcEndpointDetails.class)).thenReturn(ENDPOINT_DETAILS);
+        when(secretsManagerClient.getSecret(SECRET_ID, HeartBeatEndpointDetails.class)).thenReturn(ENDPOINT_DETAILS);
         when(postgresJdbcClientProvider.buildJdbcClient(ENDPOINT_DETAILS)).thenReturn(jdbcClient);
 
         underTest.tickle(logger, SECRET_ID);
 
-        verify(secretsManagerClient, times(1)).getSecret(SECRET_ID, JdbcEndpointDetails.class);
+        verify(secretsManagerClient, times(1)).getSecret(SECRET_ID, HeartBeatEndpointDetails.class);
     }
 
     @Test
     void tickleShouldTickleTheDatabase() {
-        when(secretsManagerClient.getSecret(SECRET_ID, JdbcEndpointDetails.class)).thenReturn(ENDPOINT_DETAILS);
+        when(secretsManagerClient.getSecret(SECRET_ID, HeartBeatEndpointDetails.class)).thenReturn(ENDPOINT_DETAILS);
         when(postgresJdbcClientProvider.buildJdbcClient(ENDPOINT_DETAILS)).thenReturn(jdbcClient);
 
         underTest.tickle(logger, SECRET_ID);
