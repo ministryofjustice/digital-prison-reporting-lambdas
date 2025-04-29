@@ -35,7 +35,6 @@ ext {
     lambdaCoreVersion = '1.2.3'
     lambdaJavaEventsVersion = '3.11.3'
     systemLambdaVersion = '1.2.1'
-    postgresVersion = '42.7.5'
 }
 
 dependencies {
@@ -43,11 +42,9 @@ dependencies {
     implementation "com.amazonaws:aws-java-sdk-dynamodb:$amazonSdkVersion"
     implementation "com.amazonaws:aws-java-sdk-stepfunctions:$amazonSdkVersion"
     implementation "com.amazonaws:aws-java-sdk-glue:$amazonSdkVersion"
-    implementation "com.amazonaws:aws-java-sdk-secretsmanager:$amazonSdkVersion"
     implementation "com.amazonaws:aws-lambda-java-core:$lambdaCoreVersion"
     implementation "com.amazonaws:aws-lambda-java-events:$lambdaJavaEventsVersion"
     implementation "software.amazon.awssdk:redshiftdata:$amazonRedShiftSdkVersion"
-    implementation "org.postgresql:postgresql:$postgresVersion"
 
     testImplementation "com.github.stefanbirkner:system-lambda:$systemLambdaVersion"
     testImplementation "org.junit.jupiter:junit-jupiter-api:$junitVersion"
