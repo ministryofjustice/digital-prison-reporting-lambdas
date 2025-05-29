@@ -12,9 +12,14 @@ public class Utils {
     public final static String TOKEN_EXPIRY_DAYS_KEY = "tokenExpiryDays";
     public final static long DEFAULT_TOKEN_EXPIRY_DAYS = 7;
     public final static String REPLICATION_TASK_ARN_KEY = "replicationTaskArn";
+    public final static String IGNORE_DMS_TASK_FAILURE_KEY = "ignoreDmsTaskFailure";
 
     public static Optional<String> getOptionalString(Map<String, Object> event, String key) {
         return Optional.ofNullable(event.get(key)).map(obj -> (String) obj);
+    }
+
+    public static boolean getBoolean(Map<String, Object> event, String key) {
+        return (boolean) event.getOrDefault(key, false);
     }
 
     @SuppressWarnings({"unchecked", "unused"})

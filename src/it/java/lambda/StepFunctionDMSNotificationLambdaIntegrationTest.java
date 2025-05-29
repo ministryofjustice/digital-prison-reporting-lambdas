@@ -8,6 +8,7 @@ import com.amazonaws.services.dynamodbv2.model.PutItemRequest;
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.LambdaLogger;
 import com.amazonaws.services.stepfunctions.AWSStepFunctions;
+import com.amazonaws.services.stepfunctions.model.SendTaskFailureRequest;
 import com.amazonaws.services.stepfunctions.model.SendTaskSuccessRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -28,18 +29,34 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.containsString;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.reset;
 import static uk.gov.justice.digital.clients.dynamo.DynamoDbClient.CREATED_AT_KEY;
 import static uk.gov.justice.digital.clients.dynamo.DynamoDbClient.EXPIRE_AT_KEY;
 import static lambda.test.Fixture.TEST_TOKEN;
 import static lambda.test.Fixture.fixedClock;
-import static uk.gov.justice.digital.common.Utils.*;
+import static uk.gov.justice.digital.common.Utils.REPLICATION_TASK_ARN_KEY;
+import static uk.gov.justice.digital.common.Utils.TASK_TOKEN_KEY;
+import static uk.gov.justice.digital.common.Utils.IGNORE_DMS_TASK_FAILURE_KEY;
+import static uk.gov.justice.digital.common.Utils.TOKEN_EXPIRY_DAYS_KEY;
 import static uk.gov.justice.digital.lambda.StepFunctionDMSNotificationLambda.CLOUDWATCH_EVENT_RESOURCES_KEY;
+import static uk.gov.justice.digital.lambda.StepFunctionDMSNotificationLambda.CLOUDWATCH_EVENT_DETAIL_KEY;
+import static uk.gov.justice.digital.lambda.StepFunctionDMSNotificationLambda.CLOUDWATCH_EVENT_ID_KEY;
+import static uk.gov.justice.digital.services.StepFunctionDMSNotificationService.DMS_TASK_SUCCESS_EVENT_ID;
+import static uk.gov.justice.digital.services.StepFunctionDMSNotificationService.DMS_TASK_FAILURE_EVENT_ID;
 
 @ExtendWith(MockitoExtension.class)
 public class StepFunctionDMSNotificationLambdaIntegrationTest {
@@ -63,6 +80,8 @@ public class StepFunctionDMSNotificationLambdaIntegrationTest {
     ArgumentCaptor<GetItemRequest> getItemRequestCapture;
     @Captor
     ArgumentCaptor<SendTaskSuccessRequest> sendStepFunctionsSuccessRequestCapture;
+    @Captor
+    ArgumentCaptor<SendTaskFailureRequest> sendStepFunctionsFailureRequestCapture;
 
     private static final LocalDateTime fixedDateTime = LocalDateTime.now(fixedClock);
 
@@ -73,6 +92,7 @@ public class StepFunctionDMSNotificationLambdaIntegrationTest {
 
     @BeforeEach
     public void setup() {
+        reset(contextMock, mockLogger, mockDynamoDb, mockDynamoDbProvider, mockStepFunctions, mockStepFunctionsProvider);
         when(contextMock.getLogger()).thenReturn(mockLogger);
         doNothing().when(mockLogger).log(anyString(), any());
         when(mockDynamoDbProvider.buildClient()).thenReturn(mockDynamoDb);
@@ -103,14 +123,13 @@ public class StepFunctionDMSNotificationLambdaIntegrationTest {
 
     @Test
     public void shouldSendSuccessRequestToStepFunctionsUsingTaskTokenRetrievedFromDynamoDb() {
-        Map<String, Object> taskStoppedEvent = createDMSTaskStoppedEvent();
+        Map<String, Object> taskSuccessfulStoppedEvent = createDMSTaskSuccessfulStoppageEvent();
         GetItemResult getItemResult = new GetItemResult()
                 .withItem(Map.of(TASK_TOKEN_KEY, new AttributeValue(TEST_TOKEN)));
 
-        when(mockDynamoDb.getItem(getItemRequestCapture.capture()))
-                .thenReturn(getItemResult);
+        when(mockDynamoDb.getItem(getItemRequestCapture.capture())).thenReturn(getItemResult);
 
-        underTest.handleRequest(taskStoppedEvent, contextMock);
+        underTest.handleRequest(taskSuccessfulStoppedEvent, contextMock);
 
         Map<String, AttributeValue> itemKey = getItemRequestCapture.getValue().getKey();
         assertThat(itemKey.get(REPLICATION_TASK_ARN_KEY).getS(), equalTo(TEST_TASK_ARN));
@@ -124,15 +143,86 @@ public class StepFunctionDMSNotificationLambdaIntegrationTest {
     }
 
     @Test
-    public void shouldNotSendRequestToStepFunctionsWhenThereIsNoTaskTokenInDynamoDb() {
-        Map<String, Object> taskStoppedEvent = createDMSTaskStoppedEvent();
+    public void shouldSendFailureRequestToStepFunctionsUsingTaskTokenRetrievedFromDynamoDbWhenDmsTaskFailureEventIsReceived() {
+        Map<String, Object> taskFailedEvent = createDMSTaskFailedStoppageEvent();
+        GetItemResult getItemResult = new GetItemResult()
+                .withItem(Map.of(TASK_TOKEN_KEY, new AttributeValue(TEST_TOKEN)));
+
+        when(mockDynamoDb.getItem(getItemRequestCapture.capture())).thenReturn(getItemResult);
+
+        underTest.handleRequest(taskFailedEvent, contextMock);
+
+        Map<String, AttributeValue> itemKey = getItemRequestCapture.getValue().getKey();
+        assertThat(itemKey.get(REPLICATION_TASK_ARN_KEY).getS(), equalTo(TEST_TASK_ARN));
+
+        verify(mockStepFunctions, times(1))
+                .sendTaskFailure(sendStepFunctionsFailureRequestCapture.capture());
+
+        SendTaskFailureRequest actualSendTaskFailureRequest = sendStepFunctionsFailureRequestCapture.getValue();
+        assertThat(actualSendTaskFailureRequest.getTaskToken(), equalTo(TEST_TOKEN));
+        assertThat(actualSendTaskFailureRequest.getError(), containsString(TEST_TASK_ARN));
+    }
+
+    @Test
+    public void shouldSendFailureRequestToStepFunctionsUsingTaskTokenRetrievedFromDynamoDbWhenDmsTaskFailureEventIsReceivedAndTheIgnoreDmsTaskFailureFlagIsNotSet() {
+        Map<String, Object> taskFailedEvent = createDMSTaskFailedStoppageEvent();
+        Map<String, AttributeValue> attributes = Map.of(
+                TASK_TOKEN_KEY, new AttributeValue(TEST_TOKEN),
+                IGNORE_DMS_TASK_FAILURE_KEY, new AttributeValue().withBOOL(false)
+        );
+        GetItemResult getItemResult = new GetItemResult().withItem(attributes);
+
+        when(mockDynamoDb.getItem(getItemRequestCapture.capture())).thenReturn(getItemResult);
+
+        underTest.handleRequest(taskFailedEvent, contextMock);
+
+        Map<String, AttributeValue> itemKey = getItemRequestCapture.getValue().getKey();
+        assertThat(itemKey.get(REPLICATION_TASK_ARN_KEY).getS(), equalTo(TEST_TASK_ARN));
+
+        verify(mockStepFunctions, times(1))
+                .sendTaskFailure(sendStepFunctionsFailureRequestCapture.capture());
+
+        SendTaskFailureRequest actualSendTaskFailureRequest = sendStepFunctionsFailureRequestCapture.getValue();
+        assertThat(actualSendTaskFailureRequest.getTaskToken(), equalTo(TEST_TOKEN));
+        assertThat(actualSendTaskFailureRequest.getError(), containsString(TEST_TASK_ARN));
+    }
+
+    @Test
+    public void shouldOnlySendSuccessRequestWhenDmsTaskFailureEventIsReceivedAndTheIgnoreDmsTaskFailureFlagIsSet() {
+        Map<String, Object> taskFailedEvent = createDMSTaskFailedStoppageEvent();
+
+        Map<String, AttributeValue> attributes = Map.of(
+                TASK_TOKEN_KEY, new AttributeValue(TEST_TOKEN),
+                IGNORE_DMS_TASK_FAILURE_KEY, new AttributeValue().withBOOL(true)
+        );
+
+        GetItemResult getItemResult = new GetItemResult().withItem(attributes);
+
+        when(mockDynamoDb.getItem(getItemRequestCapture.capture())).thenReturn(getItemResult);
+
+        underTest.handleRequest(taskFailedEvent, contextMock);
+
+        Map<String, AttributeValue> itemKey = getItemRequestCapture.getValue().getKey();
+        assertThat(itemKey.get(REPLICATION_TASK_ARN_KEY).getS(), equalTo(TEST_TASK_ARN));
+
+        verify(mockStepFunctions, times(1))
+                .sendTaskSuccess(sendStepFunctionsSuccessRequestCapture.capture());
+
+        SendTaskSuccessRequest actualSendTaskSuccessRequest = sendStepFunctionsSuccessRequestCapture.getValue();
+        assertThat(actualSendTaskSuccessRequest.getTaskToken(), equalTo(TEST_TOKEN));
+        assertThat(actualSendTaskSuccessRequest.getOutput(), equalTo("{}"));
+
+        verifyNoMoreInteractions(mockStepFunctions);
+    }
+
+    @Test
+    public void shouldFailWhenThereIsNoTaskTokenInDynamoDb() {
+        Map<String, Object> taskStoppedEvent = createDMSTaskSuccessfulStoppageEvent();
         GetItemResult emptyResult = new GetItemResult().withItem(Collections.emptyMap());
 
         when(mockDynamoDb.getItem(any())).thenReturn(emptyResult);
 
-        underTest.handleRequest(taskStoppedEvent, contextMock);
-
-        verifyNoInteractions(mockStepFunctions);
+        assertThrows(Exception.class, () -> underTest.handleRequest(taskStoppedEvent, contextMock));
     }
 
     private Map<String, Object> createRegisterTaskTokenEvent() {
@@ -143,12 +233,25 @@ public class StepFunctionDMSNotificationLambdaIntegrationTest {
         return event;
     }
 
-    private Map<String, Object> createDMSTaskStoppedEvent() {
+    private Map<String, Object> createDMSTaskSuccessfulStoppageEvent() {
+        return createDMSTaskStoppageEvent(DMS_TASK_SUCCESS_EVENT_ID);
+    }
+
+    private Map<String, Object> createDMSTaskFailedStoppageEvent() {
+        return createDMSTaskStoppageEvent(DMS_TASK_FAILURE_EVENT_ID);
+    }
+
+    private static Map<String, Object> createDMSTaskStoppageEvent(String eventId) {
         ArrayList<String> resources = new ArrayList<>();
         resources.add(TEST_TASK_ARN);
 
+        LinkedHashMap<String, Object> detail = new LinkedHashMap<>();
+        detail.put(CLOUDWATCH_EVENT_ID_KEY, eventId);
+
         Map<String, Object> event = new HashMap<>();
+
         event.put(CLOUDWATCH_EVENT_RESOURCES_KEY, resources);
+        event.put(CLOUDWATCH_EVENT_DETAIL_KEY, detail);
         return event;
     }
 }
