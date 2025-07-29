@@ -16,6 +16,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.reset;
@@ -25,7 +26,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.verifyNoInteractions;
-import static uk.gov.justice.digital.services.StepFunctionDMSNotificationService.DMS_TASK_FAILURE_EVENT_ID;
+import static uk.gov.justice.digital.services.StepFunctionDMSNotificationService.DMS_TASK_STOPPAGE_ERROR_EVENT_ID;
 import static uk.gov.justice.digital.services.StepFunctionDMSNotificationService.DMS_TASK_SUCCESS_EVENT_ID;
 import static uk.gov.justice.digital.services.test.Fixture.fixedClock;
 import static uk.gov.justice.digital.services.test.Fixture.fixedDateTime;
@@ -71,7 +72,7 @@ class StepFunctionDMSNotificationServiceTest {
         doNothing().when(mockLambdaLogger).log(anyString(), any());
         when(mockDynamoDbClient.retrieveTaskDetail(eq(TABLE), any())).thenReturn(Optional.of(new TaskDetail(TOKEN, ignoreFailure)));
 
-        undertest.processStopEvent(mockLambdaLogger, TABLE, "task-key", TASK_ARN, DMS_TASK_FAILURE_EVENT_ID);
+        undertest.processStopEvent(mockLambdaLogger, TABLE, "task-key", TASK_ARN, DMS_TASK_STOPPAGE_ERROR_EVENT_ID);
 
         verify(mockStepFunctionsClient, times(1)).notifyStepFunctionFailure(eq(TOKEN), anyString());
         verify(mockDynamoDbClient, times(1)).deleteToken(eq(TABLE), any());
@@ -84,7 +85,7 @@ class StepFunctionDMSNotificationServiceTest {
         doNothing().when(mockLambdaLogger).log(anyString(), any());
         when(mockDynamoDbClient.retrieveTaskDetail(eq(TABLE), any())).thenReturn(Optional.of(new TaskDetail(TOKEN, ignoreFailure)));
 
-        undertest.processStopEvent(mockLambdaLogger, TABLE, "task-key", TASK_ARN, DMS_TASK_FAILURE_EVENT_ID);
+        undertest.processStopEvent(mockLambdaLogger, TABLE, "task-key", TASK_ARN, DMS_TASK_STOPPAGE_ERROR_EVENT_ID);
 
         verify(mockStepFunctionsClient, times(1)).notifyStepFunctionSuccess(eq(TOKEN));
         verify(mockDynamoDbClient, times(1)).deleteToken(eq(TABLE), any());
@@ -104,10 +105,29 @@ class StepFunctionDMSNotificationServiceTest {
     }
 
     @Test
+    public void processFailureEventShouldNotifyStepFunctionOfFailureAndDeleteToken() {
+        String TaskFailureMessage = "Some DMS task failure";
+
+        doNothing().when(mockLambdaLogger).log(anyString(), any());
+        when(mockDynamoDbClient.retrieveTaskDetail(eq(TABLE), any())).thenReturn(Optional.of(new TaskDetail(TOKEN, false)));
+
+        undertest.processFailureEvent(mockLambdaLogger, TABLE, "task-key", TASK_ARN, TaskFailureMessage);
+
+        verify(mockStepFunctionsClient, times(1))
+                .notifyStepFunctionFailure(
+                        eq(TOKEN),
+                        argThat(error -> error.toLowerCase().contains(TaskFailureMessage.toLowerCase()))
+                );
+        verify(mockDynamoDbClient, times(1)).deleteToken(eq(TABLE), any());
+        verifyNoMoreInteractions(mockStepFunctionsClient);
+    }
+
+    @Test
     public void registerTaskDetailsShouldSaveTaskDetails() {
         boolean ignoreTaskFailure = false;
+        doNothing().when(mockLambdaLogger).log(anyString(), any());
 
-        undertest.registerTaskDetails(TOKEN, TASK_ARN, ignoreTaskFailure, TABLE, TOKEN_EXPIRY_DAYS);
+        undertest.registerTaskDetails(mockLambdaLogger, TOKEN, TASK_ARN, ignoreTaskFailure, TABLE, TOKEN_EXPIRY_DAYS);
 
         verify(mockDynamoDbClient, times(1))
                 .saveTaskDetails(

@@ -47,6 +47,7 @@ import static org.mockito.Mockito.reset;
 import static uk.gov.justice.digital.clients.dynamo.DynamoDbClient.CREATED_AT_KEY;
 import static uk.gov.justice.digital.clients.dynamo.DynamoDbClient.EXPIRE_AT_KEY;
 import static lambda.test.Fixture.TEST_TOKEN;
+import static lambda.test.Fixture.REPLICATION_TASK_STOPPED_EVENT_TYPE;
 import static lambda.test.Fixture.fixedClock;
 import static uk.gov.justice.digital.common.Utils.REPLICATION_TASK_ARN_KEY;
 import static uk.gov.justice.digital.common.Utils.TASK_TOKEN_KEY;
@@ -55,8 +56,10 @@ import static uk.gov.justice.digital.common.Utils.TOKEN_EXPIRY_DAYS_KEY;
 import static uk.gov.justice.digital.lambda.StepFunctionDMSNotificationLambda.CLOUDWATCH_EVENT_RESOURCES_KEY;
 import static uk.gov.justice.digital.lambda.StepFunctionDMSNotificationLambda.CLOUDWATCH_EVENT_DETAIL_KEY;
 import static uk.gov.justice.digital.lambda.StepFunctionDMSNotificationLambda.CLOUDWATCH_EVENT_ID_KEY;
+import static uk.gov.justice.digital.lambda.StepFunctionDMSNotificationLambda.CLOUDWATCH_EVENT_TYPE_KEY;
+import static uk.gov.justice.digital.lambda.StepFunctionDMSNotificationLambda.DMS_TASK_FAILURE_EVENT_TYPE;
 import static uk.gov.justice.digital.services.StepFunctionDMSNotificationService.DMS_TASK_SUCCESS_EVENT_ID;
-import static uk.gov.justice.digital.services.StepFunctionDMSNotificationService.DMS_TASK_FAILURE_EVENT_ID;
+import static uk.gov.justice.digital.services.StepFunctionDMSNotificationService.DMS_TASK_STOPPAGE_ERROR_EVENT_ID;
 
 @ExtendWith(MockitoExtension.class)
 public class StepFunctionDMSNotificationLambdaIntegrationTest {
@@ -144,7 +147,7 @@ public class StepFunctionDMSNotificationLambdaIntegrationTest {
 
     @Test
     public void shouldSendFailureRequestToStepFunctionsUsingTaskTokenRetrievedFromDynamoDbWhenDmsTaskFailureEventIsReceived() {
-        Map<String, Object> taskFailedEvent = createDMSTaskFailedStoppageEvent();
+        Map<String, Object> taskFailedEvent = createDMSTaskFailedEvent();
         GetItemResult getItemResult = new GetItemResult()
                 .withItem(Map.of(TASK_TOKEN_KEY, new AttributeValue(TEST_TOKEN)));
 
@@ -164,8 +167,8 @@ public class StepFunctionDMSNotificationLambdaIntegrationTest {
     }
 
     @Test
-    public void shouldSendFailureRequestToStepFunctionsUsingTaskTokenRetrievedFromDynamoDbWhenDmsTaskFailureEventIsReceivedAndTheIgnoreDmsTaskFailureFlagIsNotSet() {
-        Map<String, Object> taskFailedEvent = createDMSTaskFailedStoppageEvent();
+    public void shouldSendFailureRequestToStepFunctionsWhenDmsTaskStoppedWithErrorsAndTheIgnoreDmsTaskFailureFlagIsNotSet() {
+        Map<String, Object> taskFailedEvent = createDMSTaskStoppageWithErrorEvent();
         Map<String, AttributeValue> attributes = Map.of(
                 TASK_TOKEN_KEY, new AttributeValue(TEST_TOKEN),
                 IGNORE_DMS_TASK_FAILURE_KEY, new AttributeValue().withBOOL(false)
@@ -188,8 +191,8 @@ public class StepFunctionDMSNotificationLambdaIntegrationTest {
     }
 
     @Test
-    public void shouldOnlySendSuccessRequestWhenDmsTaskFailureEventIsReceivedAndTheIgnoreDmsTaskFailureFlagIsSet() {
-        Map<String, Object> taskFailedEvent = createDMSTaskFailedStoppageEvent();
+    public void shouldOnlySendSuccessRequestWhenDmsTaskStoppedWithErrorEventIsReceivedAndTheIgnoreDmsTaskFailureFlagIsSet() {
+        Map<String, Object> taskFailedEvent = createDMSTaskStoppageWithErrorEvent();
 
         Map<String, AttributeValue> attributes = Map.of(
                 TASK_TOKEN_KEY, new AttributeValue(TEST_TOKEN),
@@ -237,8 +240,22 @@ public class StepFunctionDMSNotificationLambdaIntegrationTest {
         return createDMSTaskStoppageEvent(DMS_TASK_SUCCESS_EVENT_ID);
     }
 
-    private Map<String, Object> createDMSTaskFailedStoppageEvent() {
-        return createDMSTaskStoppageEvent(DMS_TASK_FAILURE_EVENT_ID);
+    private Map<String, Object> createDMSTaskStoppageWithErrorEvent() {
+        return createDMSTaskStoppageEvent(DMS_TASK_STOPPAGE_ERROR_EVENT_ID);
+    }
+
+    private Map<String, Object> createDMSTaskFailedEvent() {
+        ArrayList<String> resources = new ArrayList<>();
+        resources.add(TEST_TASK_ARN);
+
+        LinkedHashMap<String, Object> detail = new LinkedHashMap<>();
+        detail.put(CLOUDWATCH_EVENT_TYPE_KEY, DMS_TASK_FAILURE_EVENT_TYPE);
+
+        Map<String, Object> event = new HashMap<>();
+
+        event.put(CLOUDWATCH_EVENT_RESOURCES_KEY, resources);
+        event.put(CLOUDWATCH_EVENT_DETAIL_KEY, detail);
+        return event;
     }
 
     private static Map<String, Object> createDMSTaskStoppageEvent(String eventId) {
@@ -247,6 +264,7 @@ public class StepFunctionDMSNotificationLambdaIntegrationTest {
 
         LinkedHashMap<String, Object> detail = new LinkedHashMap<>();
         detail.put(CLOUDWATCH_EVENT_ID_KEY, eventId);
+        detail.put(CLOUDWATCH_EVENT_TYPE_KEY, REPLICATION_TASK_STOPPED_EVENT_TYPE);
 
         Map<String, Object> event = new HashMap<>();
 

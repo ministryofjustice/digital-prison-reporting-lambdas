@@ -8,6 +8,7 @@ import java.time.ZoneOffset;
 public class Fixture {
 
     public final static String TEST_TOKEN = "test-token";
+    public final static String REPLICATION_TASK_STOPPED_EVENT_TYPE = "REPLICATION_TASK_STOPPED";
 
     public static final ZoneId utcZoneId = ZoneId.of("UTC");
 
